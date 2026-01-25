@@ -1,4 +1,4 @@
-# fear_profile.py
+# fear_profile.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import json
 import os
 import time

@@ -1,99 +1,104 @@
-# sound_manager.py
+# sound_manager.py - без лишнего вывода
 import arcade
+import os
 import random
 
 
 class SoundManager:
-    """Менеджер звуков для хоррора"""
+    """Менеджер звуков"""
 
-    def __init__(self):
+    def __init__(self, sound_mode="level2"):
+        """
+        sound_mode:
+        - "level1": ТОЛЬКО скримеры
+        - "level2": ВСЕ звуки
+        """
         self.sounds = {}
-        self.background_sounds = []
-        self.load_sounds()
+        self.sound_volume = 1.0
+        self.sound_mode = sound_mode
 
-    def load_sounds(self):
+        self.load_all_sounds()
+
+    def load_custom_sounds(self):
+        """Загрузить кастомные звуки"""
+        custom_folder = "custom_sounds"
+
+        if not os.path.exists(custom_folder):
+            return False
+
+        sound_categories = {
+            'scream': ['scare', 'scream', 'terror', 'demonic', 'distorted', 'quick', 'long'],
+            'ambient': ['ambient', 'creepy', 'wind', 'howl', 'distant', 'echo'],
+            'music': ['music', 'theme', 'panic', 'tension', 'menu'],
+            'monster': ['monster', 'growl', 'breathing', 'moan', 'demon', 'claws'],
+            'footstep': ['step', 'footstep', 'drag', 'quick', 'stone', 'wood'],
+            'heartbeat': ['heartbeat', 'pulse', 'slow', 'fast', 'panic'],
+            'door': ['door', 'creak', 'slam'],
+            'whisper': ['whisper', 'nonsense'],
+            'drip': ['drip', 'water', 'book', 'drop'],
+            'sudden': ['sudden', 'impact', 'glass', 'metal', 'break', 'clang', 'chain']
+        }
+
+        for category in sound_categories.keys():
+            self.sounds[category] = []
+
+        total_files = 0
+
+        for root, dirs, files in os.walk(custom_folder):
+            for file in files:
+                file_lower = file.lower()
+
+                if not file_lower.endswith(('.wav', '.ogg', '.mp3')):
+                    continue
+
+                file_path = os.path.join(root, file)
+                file_assigned = False
+
+                for category, keywords in sound_categories.items():
+                    for keyword in keywords:
+                        if keyword in file_lower:
+                            try:
+                                sound = arcade.load_sound(file_path)
+                                self.sounds[category].append({
+                                    'sound': sound,
+                                    'path': file_path,
+                                    'name': file
+                                })
+                                total_files += 1
+                                file_assigned = True
+                                break
+                            except:
+                                file_assigned = True
+                                break
+                    if file_assigned:
+                        break
+
+        return total_files > 0
+
+    def load_all_sounds(self):
         """Загрузить все звуки"""
-        try:
-            # Проверяем существующие звуки
-            available_sounds = [
-                # Проверенные звуки из arcade
-                (":resources:sounds/explosion2.wav", 'jump_scare'),
-                (":resources:sounds/explosion1.wav", 'jump_scare'),
-                (":resources:sounds/rockHit2.wav", 'heartbeat'),
-                (":resources:sounds/upgrade4.wav", 'door_creak'),
-                (":resources:sounds/upgrade5.wav", 'door_creak'),
-                (":resources:sounds/hurt3.wav", 'monster_growl'),
-                (":resources:sounds/hurt4.wav", 'monster_growl'),
-                (":resources:sounds/hurt5.wav", 'monster_growl'),
-                (":resources:sounds/coin1.wav", 'footstep'),
-                (":resources:sounds/coin2.wav", 'footstep'),
-                (":resources:sounds/coin3.wav", 'footstep'),
-                (":resources:sounds/laser2.wav", 'whisper'),
-                (":resources:sounds/laser4.wav", 'whisper'),
-                (":resources:sounds/hurt1.wav", 'scream'),
-                (":resources:sounds/laser1.wav", 'wind'),
-                (":resources:sounds/coin4.wav", 'drip'),
-            ]
+        self.load_custom_sounds()
 
-            # Загружаем только доступные звуки
-            for path, category in available_sounds:
-                try:
-                    sound = arcade.load_sound(path)
-
-                    if category not in self.sounds:
-                        self.sounds[category] = []
-
-                    self.sounds[category].append(sound)
-                    print(f"Загружен звук: {category} из {path}")
-
-                except Exception as e:
-                    print(f"Не удалось загрузить {path}: {e}")
-
-            print(f"Успешно загружено {sum(len(v) for v in self.sounds.values())} звуков")
-
-        except Exception as e:
-            print(f"Критическая ошибка загрузки звуков: {e}")
-            # Создаем заглушки
-            self.sounds = {
-                'jump_scare': [None],
-                'heartbeat': [None],
-                'door_creak': [None],
-                'monster_growl': [None],
-                'footstep': [None],
-                'whisper': [None],
-                'scream': [None],
-                'wind': [None],
-                'drip': [None]
-            }
-
-    def play_sound(self, sound_name: str, volume: float = 1.0):
+    def play_sound(self, sound_type: str, volume: float = 1.0):
         """Воспроизвести звук"""
-        if sound_name in self.sounds and self.sounds[sound_name]:
-            sound_list = self.sounds[sound_name]
-            sound = random.choice(sound_list)
+        # LEVEL 1: только скримеры
+        if self.sound_mode == "level1" and sound_type != 'scream':
+            return False
 
-            if sound is not None:
-                try:
-                    sound.play(volume=volume)
-                except Exception as e:
-                    # Тихий fallback
-                    pass
+        if sound_type not in self.sounds:
+            return False
 
-    def play_random_background(self):
-        """Воспроизвести случайный фоновый звук"""
-        if random.random() < 0.05:  # 5% шанс
-            sound_type = random.choice(['wind', 'drip', 'door_creak', 'whisper'])
-            if sound_type in self.sounds:
-                self.play_sound(sound_type, volume=0.2)
+        if not self.sounds[sound_type]:
+            return False
 
-    def play_heartbeat(self, stress_level: float):
-        """Воспроизвести сердцебиение в зависимости от стресса"""
-        if stress_level > 50:
-            if random.random() < 0.1 + (stress_level - 50) / 500:
-                volume = 0.1 + (stress_level / 100) * 0.3
-                self.play_sound('heartbeat', volume=volume)
+        try:
+            sound_data = random.choice(self.sounds[sound_type])
+            final_volume = self.sound_volume * volume
+            sound_data['sound'].play(volume=final_volume)
+            return True
+        except:
+            return False
 
-    def play_footstep(self):
-        """Воспроизвести звук шага"""
-        if random.random() < 0.4:
-            self.play_sound('footstep', volume=0.15)
+    def set_volume(self, volume: float):
+        """Установить громкость"""
+        self.sound_volume = max(0.0, min(1.0, volume))

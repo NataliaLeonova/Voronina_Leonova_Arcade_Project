@@ -1,45 +1,43 @@
-# level1_maze.py - ИСПРАВЛЕННЫЕ КОЛЛИЗИИ (СО СПРАЙТАМИ)
+# level1_maze.py - ТОЛЬКО СКРИМЕРЫ С КАРТОЙ
 import arcade
 import random
 import math
 import time
-from typing import List, Dict
+import os
 from data_models import CalibrationData
 
 
 class Level1MazeView(arcade.View):
-    """Упрощенный и интересный хоррор-лабиринт с ПРАВИЛЬНЫМИ КОЛЛИЗИЯМИ (спрайтами)"""
+    """Level 1: ТОЛЬКО звуки скримеров, НИКАКИХ других звуков"""
 
     def __init__(self, calibration_data: CalibrationData):
         super().__init__()
         self.calibration_data = calibration_data
 
-        # === ПРОСТЫЕ НАСТРОЙКИ ===
+        # === НАСТРОЙКИ ===
         self.tile_size = 50
         self.map_width = 15
         self.map_height = 15
-
-        # Выход
         self.exit_x = self.map_width - 2
         self.exit_y = self.map_height - 2
 
-        # Игрок (спрайт)
+        # Игрок
         self.player_sprite = None
-        self.player_x = 1.5  # В единицах тайлов
-        self.player_y = 1.5  # В единицах тайлов
-        self.player_radius = 0.4  # В единицах тайлов (40% от тайла)
+        self.player_x = 1.5
+        self.player_y = 1.5
+        self.player_radius = 0.4
         self.player_speed = 5.0
 
         # Камера
         self.camera_x = 0
         self.camera_y = 0
 
-        # Спрайтовые списки
+        # Спрайты
         self.wall_list = None
         self.exit_list = None
         self.scare_list = None
 
-        # Лабиринт - С ПРАВИЛЬНЫМИ СТЕНАМИ
+        # === ЛАБИРИНТ ===
         self.maze = [
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
@@ -58,38 +56,42 @@ class Level1MazeView(arcade.View):
             [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
         ]
 
-        # Выход в лабиринте
+        # Выход
         self.maze[self.exit_y][self.exit_x] = 2
 
-        # Скримеры - УДАЛИЛ СКРИМЕРОВ В СТЕНАХ
-        # Проверяем, чтобы скримеры были в проходах (0) а не в стенах (1)
+        # === СКРИМЕРЫ ===
         self.jumpscares = [
-            # {'x': 3.5, 'y': 3.5, 'triggered': False},  # В стене! УДАЛЕНО
-            {'x': 7.5, 'y': 5.5, 'triggered': False},  # В проходе ✓
-            {'x': 11.5, 'y': 8.5, 'triggered': False},  # В проходе ✓
-            # {'x': 5.5, 'y': 11.5, 'triggered': False},  # В стене! УДАЛЕНО
-            # Добавляем новых скримеров в проходах:
-            {'x': 2.5, 'y': 7.5, 'triggered': False},  # Новый скример
-            {'x': 12.5, 'y': 3.5, 'triggered': False},  # Новый скример
+            {'x': 7.5, 'y': 5.5, 'triggered': False, 'visible': True},
+            {'x': 11.5, 'y': 8.5, 'triggered': False, 'visible': True},
+            {'x': 2.5, 'y': 7.5, 'triggered': False, 'visible': True},
+            {'x': 12.5, 'y': 3.5, 'triggered': False, 'visible': True},
+            {'x': 13.5, 'y': 12.5, 'triggered': False, 'visible': False},
+            {'x': 4.5, 'y': 2.5, 'triggered': False, 'visible': True},
+            {'x': 10.5, 'y': 11.5, 'triggered': False, 'visible': True},
+            {'x': 5.5, 'y': 12.5, 'triggered': False, 'visible': True},
+            {'x': 13.5, 'y': 5.5, 'triggered': False, 'visible': True},
+            {'x': 7.5, 'y': 9.5, 'triggered': False, 'visible': True},
+            {'x': 3.5, 'y': 11.5, 'triggered': False, 'visible': False, 'hidden': True, 'activation_range': 2.0},
+            {'x': 8.5, 'y': 2.5, 'triggered': False, 'visible': False, 'hidden': True, 'activation_range': 1.5},
         ]
 
         self.active_scare = None
         self.scare_timer = 0
 
-        # Эффекты
+        # === ЭФФЕКТЫ ===
         self.screen_shake = 0
         self.flash = 0
         self.stress = 30
+        self.sanity = 100
         self.scares_triggered = 0
+        self.vignette_darkness = 0
+        self.blood_overlay = 0
 
-        # Звуки
-        try:
-            from sound_manager import SoundManager
-            self.sound_manager = SoundManager()
-        except:
-            self.sound_manager = None
+        # === ЗВУКИ - ТОЛЬКО СКРИМЕРЫ ===
+        self.sound_manager = None
+        self.init_sound_manager()
 
-        # Управление
+        # === УПРАВЛЕНИЕ ===
         self.keys_pressed = {
             arcade.key.W: False,
             arcade.key.S: False,
@@ -97,38 +99,38 @@ class Level1MazeView(arcade.View):
             arcade.key.D: False
         }
 
-        # Время старта
+        # Время
         self.start_time = time.time()
 
-        # Инициализируем спрайты
+        # Настройка
         self.setup()
 
-        print("=" * 60)
-        print("ХОРРОР ЛАБИРИНТ: Найди красный выход!")
-        print("=" * 60)
-        print("Управление: УДЕРЖИВАЙ WASD для движения")
-        print("Стены теперь работают через спрайты!")
-        print(f"Скримеров: {len(self.jumpscares)} (все в проходах)")
-        print("=" * 60)
+    def init_sound_manager(self):
+        """Инициализировать менеджер звуков ТОЛЬКО для скримеров"""
+        try:
+            from sound_manager import SoundManager
+            self.sound_manager = SoundManager(sound_mode="level1")
+            self.sound_manager.set_volume(1.0)
+        except Exception as e:
+            self.sound_manager = None
 
     def setup(self):
         """Настройка спрайтов"""
-        # Создаем спрайт-листы
         self.wall_list = arcade.SpriteList()
         self.exit_list = arcade.SpriteList()
         self.scare_list = arcade.SpriteList()
 
-        # Создаем стены как спрайты
+        # Стены
         for y in range(self.map_height):
             for x in range(self.map_width):
-                if self.maze[y][x] == 1:  # Стена
+                if self.maze[y][x] == 1:
                     wall = arcade.SpriteSolidColor(
                         self.tile_size, self.tile_size, (80, 60, 70)
                     )
                     wall.center_x = x * self.tile_size + self.tile_size // 2
                     wall.center_y = y * self.tile_size + self.tile_size // 2
                     self.wall_list.append(wall)
-                elif self.maze[y][x] == 2:  # Выход
+                elif self.maze[y][x] == 2:
                     exit_sprite = arcade.SpriteSolidColor(
                         self.tile_size - 20, self.tile_size - 20, (150, 50, 50)
                     )
@@ -136,28 +138,31 @@ class Level1MazeView(arcade.View):
                     exit_sprite.center_y = y * self.tile_size + self.tile_size // 2
                     self.exit_list.append(exit_sprite)
 
-        # Создаем спрайты для скримеров - ТОЛЬКО В ПРОХОДАХ
+        # Скримеры
+        valid_scares = 0
         for scare in self.jumpscares:
-            # Проверяем, что скример не в стене
             x_int = int(scare['x'])
             y_int = int(scare['y'])
 
             if 0 <= x_int < self.map_width and 0 <= y_int < self.map_height:
-                if self.maze[y_int][x_int] == 0:  # Проверяем, что это проход
-                    scare_sprite = arcade.SpriteSolidColor(20, 20, (200, 50, 50))
+                if self.maze[y_int][x_int] == 0:
+                    if scare.get('hidden', False):
+                        color = (200, 50, 50, 0)
+                    else:
+                        color = (200, 50, 50, 150 if scare.get('visible', True) else 0)
+
+                    scare_sprite = arcade.SpriteSolidColor(20, 20, color)
                     scare_sprite.center_x = scare['x'] * self.tile_size
                     scare_sprite.center_y = scare['y'] * self.tile_size
                     scare['sprite'] = scare_sprite
                     self.scare_list.append(scare_sprite)
-                    print(f"Скример создан на ({scare['x']}, {scare['y']}) - в проходе")
+                    valid_scares += 1
                 else:
-                    print(f"ОШИБКА: Скример на ({scare['x']}, {scare['y']}) в стене! Пропускаем.")
-                    scare['sprite'] = None
+                    self.jumpscares.remove(scare)
             else:
-                print(f"ОШИБКА: Координаты скримера ({scare['x']}, {scare['y']}) вне карты!")
-                scare['sprite'] = None
+                self.jumpscares.remove(scare)
 
-        # Создаем спрайт игрока
+        # Игрок
         player_size = int(self.player_radius * self.tile_size * 2)
         self.player_sprite = arcade.SpriteSolidColor(
             player_size, player_size, (100, 150, 255)
@@ -166,43 +171,37 @@ class Level1MazeView(arcade.View):
         self.player_sprite.center_y = self.player_y * self.tile_size
 
     def check_collisions(self, dx, dy):
-        """Проверка коллизий с помощью спрайтов"""
-        # Сохраняем старую позицию
+        """Проверка коллизий"""
         old_x = self.player_sprite.center_x
         old_y = self.player_sprite.center_y
 
-        # Пробуем новую позицию по X
         self.player_sprite.center_x += dx
         collisions = arcade.check_for_collision_with_list(self.player_sprite, self.wall_list)
 
         if collisions:
-            # Есть коллизия - возвращаем X
             self.player_sprite.center_x = old_x
-            # Пробуем скользить по Y
             self.player_sprite.center_y += dy
             collisions = arcade.check_for_collision_with_list(self.player_sprite, self.wall_list)
             if collisions:
-                # Все еще коллизия - возвращаем все
                 self.player_sprite.center_y = old_y
         else:
-            # Нет коллизии по X, пробуем Y
-            old_x = self.player_sprite.center_x  # Обновляем старый X
+            old_x = self.player_sprite.center_x
             self.player_sprite.center_y += dy
             collisions = arcade.check_for_collision_with_list(self.player_sprite, self.wall_list)
             if collisions:
-                # Коллизия по Y - возвращаем Y
                 self.player_sprite.center_y = old_y
 
-        # Обновляем координаты игрока (для других вычислений)
         self.player_x = self.player_sprite.center_x / self.tile_size
         self.player_y = self.player_sprite.center_y / self.tile_size
 
     def on_update(self, delta_time: float):
-        """Обновление"""
-        # Движение при удержании клавиш
+        """Обновление игры"""
+        current_time = time.time()
+
+        # Движение (БЕЗ ЗВУКОВ ШАГОВ!)
         move_x = 0
         move_y = 0
-        speed = self.player_speed * delta_time * 0.5 * self.tile_size  # Преобразуем в пиксели
+        speed = self.player_speed * delta_time * 0.5 * self.tile_size
 
         if self.keys_pressed[arcade.key.W]:
             move_y += speed
@@ -213,47 +212,70 @@ class Level1MazeView(arcade.View):
         if self.keys_pressed[arcade.key.D]:
             move_x += speed
 
-        # Если есть движение - двигаем с проверкой коллизий
         if move_x != 0 or move_y != 0:
             self.check_collisions(move_x, move_y)
 
-        # Обновляем камеру
+        # Камера
         target_x = self.player_sprite.center_x - self.window.width // 2
         target_y = self.player_sprite.center_y - self.window.height // 2
 
         self.camera_x += (target_x - self.camera_x) * 0.2
         self.camera_y += (target_y - self.camera_y) * 0.2
 
-        # Проверка скримеров
+        # Скримеры
+        self.update_scares()
         self.check_scares()
 
-        # Обновление таймера скримера
+        # Таймер скримера
         if self.active_scare and self.scare_timer > 0:
             self.scare_timer -= delta_time
             if self.scare_timer <= 0:
                 self.active_scare = None
 
-        # Обновление эффектов
+        # Эффекты
         if self.screen_shake > 0:
             self.screen_shake = max(0, self.screen_shake - delta_time * 3)
 
         if self.flash > 0:
             self.flash = max(0, self.flash - delta_time * 5)
 
-        # Проверка выхода (коллизия с выходом)
+        if self.vignette_darkness > 0:
+            self.vignette_darkness = max(0, self.vignette_darkness - delta_time * 0.5)
+
+        if self.blood_overlay > 0:
+            self.blood_overlay = max(0, self.blood_overlay - delta_time * 0.5)
+
+        # Авто снижение стресса
+        if self.stress > 30:
+            self.stress = max(30, self.stress - delta_time * 2)
+
+        # Восстановление рассудка
+        if self.sanity < 100:
+            self.sanity = min(100, self.sanity + delta_time * 0.5)
+
+        # Выход
         exit_collisions = arcade.check_for_collision_with_list(self.player_sprite, self.exit_list)
         if exit_collisions:
             self.win_game()
 
-        # Автоматическое снижение стресса
-        if self.stress > 30:
-            self.stress = max(30, self.stress - delta_time * 5)
+    def update_scares(self):
+        """Активация скрытых скримеров"""
+        for scare in self.jumpscares:
+            if scare.get('hidden', False) and not scare['triggered'] and scare.get('sprite'):
+                dx = scare['sprite'].center_x - self.player_sprite.center_x
+                dy = scare['sprite'].center_y - self.player_sprite.center_y
+                distance = math.sqrt(dx * dx + dy * dy) / self.tile_size
+
+                activation_range = scare.get('activation_range', 2.0)
+
+                if distance < activation_range:
+                    scare['visible'] = True
+                    scare['sprite'].alpha = 255
 
     def check_scares(self):
         """Проверка активации скримеров"""
         for scare in self.jumpscares:
-            if not scare['triggered'] and scare.get('sprite'):
-                # Проверяем коллизию со спрайтом скримера
+            if not scare['triggered'] and scare.get('sprite') and scare.get('visible', True):
                 if arcade.check_for_collision(self.player_sprite, scare['sprite']):
                     self.trigger_scare(scare)
                     break
@@ -264,71 +286,57 @@ class Level1MazeView(arcade.View):
         self.active_scare = scare
         self.scare_timer = 0.8
         self.scares_triggered += 1
-        self.stress = min(100, self.stress + 30)
+
+        # Стресс
+        stress_increase = 30 + random.randint(0, 20)
+        self.stress = min(100, self.stress + stress_increase)
+        self.sanity = max(0, self.sanity - stress_increase // 2)
 
         # Эффекты
-        self.screen_shake = 0.7
-        self.flash = 1.0
+        self.screen_shake = 0.7 + random.random() * 0.3
+        self.flash = 0.8 + random.random() * 0.2
+        self.blood_overlay = 0.3 + random.random() * 0.2
+        self.vignette_darkness = 0.2
 
-        # Звук
+        # ЗВУК СКРИМЕРА (единственный звук в Level 1)
         if self.sound_manager:
-            self.sound_manager.play_sound('jump_scare', volume=0.8)
-
-        print(f"ААА! Скример #{self.scares_triggered} на координатах ({scare['x']}, {scare['y']})!")
+            volume = 0.8 + random.random() * 0.2
+            success = self.sound_manager.play_sound('scream', volume=volume)
 
     def on_draw(self):
         """Отрисовка"""
         self.clear()
+        arcade.set_background_color((20, 10, 30))
 
-        # Тряска камеры
+        # Тряска
         shake_x = random.uniform(-self.screen_shake, self.screen_shake) * 20 if self.screen_shake > 0 else 0
         shake_y = random.uniform(-self.screen_shake, self.screen_shake) * 20 if self.screen_shake > 0 else 0
 
-        # Фон
-        arcade.set_background_color((20, 10, 30))
-
-        # Рисуем стены (весь список сразу)
+        # Стены
         for wall in self.wall_list:
-            # Позиция с учетом камеры
             x = wall.center_x - self.camera_x + shake_x
             y = wall.center_y - self.camera_y + shake_y
 
-            # Используем фиксированный цвет (80, 60, 70) вместо wall.color
             arcade.draw_lrbt_rectangle_filled(
                 x - self.tile_size // 2, x + self.tile_size // 2,
                 y - self.tile_size // 2, y + self.tile_size // 2,
-                (80, 60, 70)  # ФИКСИРОВАННЫЙ ЦВЕТ СТЕН
+                (80, 60, 70)
             )
 
-            # Тень для объема
-            arcade.draw_lrbt_rectangle_filled(
-                x - self.tile_size // 2, x - self.tile_size // 2 + 5,
-                y - self.tile_size // 2, y + self.tile_size // 2,
-                (60, 40, 50)
-            )
-            arcade.draw_lrbt_rectangle_filled(
-                x - self.tile_size // 2, x + self.tile_size // 2,
-                y - self.tile_size // 2, y - self.tile_size // 2 + 5,
-                (60, 40, 50)
-            )
-
-        # Рисуем выход с пульсацией
+        # Выход
         for exit_sprite in self.exit_list:
             pulse = (math.sin(time.time() * 5) + 1) / 2
             red = 150 + int(100 * pulse)
 
-            # Позиция с учетом камеры
             x = exit_sprite.center_x - self.camera_x + shake_x
             y = exit_sprite.center_y - self.camera_y + shake_y
 
-            # Рисуем выход
             arcade.draw_lrbt_rectangle_filled(
                 x - (self.tile_size - 20) // 2, x + (self.tile_size - 20) // 2,
                 y - (self.tile_size - 20) // 2, y + (self.tile_size - 20) // 2,
                 (red, 50, 50)
             )
 
-            # Текст ВЫХОД
             arcade.draw_text(
                 "ВЫХОД",
                 x, y,
@@ -336,47 +344,36 @@ class Level1MazeView(arcade.View):
                 anchor_x="center", anchor_y="center"
             )
 
-        # Рисуем скримеров (только тех, у кого есть спрайт)
+        # Скримеры
         for scare in self.jumpscares:
-            if not scare['triggered'] and scare.get('sprite'):
-                # Позиция с учетом камеры
+            if not scare['triggered'] and scare.get('sprite') and scare.get('visible', True):
                 x = scare['sprite'].center_x - self.camera_x + shake_x
                 y = scare['sprite'].center_y - self.camera_y + shake_y
 
-                # Индикатор скримера (мерцает)
-                if random.random() < 0.2:
-                    arcade.draw_circle_filled(
-                        x, y,
-                        15,  # Увеличил радиус для лучшей видимости
-                        (200, 50, 50)
-                    )
-                    arcade.draw_circle_outline(
-                        x, y,
-                        20,  # Увеличил радиус для лучшей видимости
-                        (255, 100, 100), 2
-                    )
+                if scare.get('hidden', False):
+                    if random.random() < 0.1:
+                        arcade.draw_circle_filled(x, y, 12, (150, 50, 150, 100))
+                else:
+                    if random.random() < 0.15:
+                        arcade.draw_circle_filled(x, y, 10, (200, 50, 50))
 
-        # Рисуем активный скример
+        # Активный скример
         if self.active_scare and self.scare_timer > 0:
             scare = self.active_scare
             x = scare['sprite'].center_x - self.camera_x + shake_x
             y = scare['sprite'].center_y - self.camera_y + shake_y
 
-            # БОЛЬШОЕ СТРАШНОЕ ЛИЦО
             size = 80 + (1.0 - self.scare_timer / 0.8) * 40
             alpha = int(255 * (self.scare_timer / 0.8))
 
-            # Лицо
-            arcade.draw_circle_filled(x, y, size, (30, 30, 30, alpha))
-            # Глаза
+            arcade.draw_circle_filled(x, y, size, (150, 0, 0, alpha))
             arcade.draw_circle_filled(x - 25, y + 15, 20, (255, 255, 255, alpha))
             arcade.draw_circle_filled(x + 25, y + 15, 20, (255, 255, 255, alpha))
             arcade.draw_circle_filled(x - 25, y + 15, 8, (0, 0, 0, alpha))
             arcade.draw_circle_filled(x + 25, y + 15, 8, (0, 0, 0, alpha))
-            # Рот
             arcade.draw_ellipse_filled(x, y - 25, 50, 25, (200, 0, 0, alpha))
 
-        # Рисуем игрока
+        # Игрок
         player_x = self.player_sprite.center_x - self.camera_x + shake_x
         player_y = self.player_sprite.center_y - self.camera_y + shake_y
         player_size = self.player_radius * self.tile_size
@@ -384,54 +381,81 @@ class Level1MazeView(arcade.View):
         arcade.draw_circle_filled(player_x, player_y, player_size, (100, 150, 255))
         arcade.draw_circle_outline(player_x, player_y, player_size, (200, 200, 255), 2)
 
-        # Направление (маленькая точка впереди)
-        arcade.draw_circle_filled(
-            player_x + player_size * 0.7,
-            player_y,
-            player_size * 0.3,
-            (255, 255, 255)
-        )
-
-        # Вспышка от скримера
+        # Вспышка
         if self.flash > 0:
+            flash_color = (255, 200, 200, int(self.flash * 100))
             arcade.draw_lrbt_rectangle_filled(
                 0, self.window.width,
                 0, self.window.height,
-                (255, 200, 200, int(self.flash * 100))
+                flash_color
+            )
+
+        # Кровь
+        if self.blood_overlay > 0:
+            blood_alpha = int(self.blood_overlay * 100)
+            arcade.draw_lrbt_rectangle_filled(
+                0, self.window.width,
+                0, self.window.height,
+                (150, 20, 20, blood_alpha // 3)
             )
 
         # Интерфейс
         self.draw_hud()
 
+        # МИНИ-КАРТА (добавляем в конце)
+        self.draw_minimap()
+
     def draw_hud(self):
         """Интерфейс"""
         # Фон HUD
         arcade.draw_lrbt_rectangle_filled(
-            20, 300,
-            20, 90,
+            20, 350,
+            20, 120,
             (0, 0, 0, 180)
         )
 
         # Стресс
-        stress_width = 260 * (self.stress / 100)
-        stress_color = (255, 100, 100) if self.stress > 70 else (255, 255, 100)
+        stress_width = 320 * (self.stress / 100)
+        if self.stress > 80:
+            pulse = (math.sin(time.time() * 8) + 1) / 2
+            stress_color = (255, 50 + int(50 * pulse), 50)
+        elif self.stress > 60:
+            stress_color = (255, 150, 50)
+        else:
+            stress_color = (255, 255, 100)
 
         arcade.draw_lrbt_rectangle_filled(
             30, 30 + stress_width,
-            70, 80,
+            100, 110,
             stress_color
+        )
+
+        # Рассудок
+        sanity_width = 320 * (self.sanity / 100)
+        sanity_color = (100, 200, 255) if self.sanity > 50 else (255, 150, 100)
+
+        arcade.draw_lrbt_rectangle_filled(
+            30, 30 + sanity_width,
+            70, 80,
+            sanity_color
         )
 
         arcade.draw_text(
             f"СТРЕСС: {int(self.stress)}%",
-            30, 50,
-            arcade.color.WHITE, 18
+            30, 80,
+            arcade.color.WHITE, 20
         )
 
         arcade.draw_text(
-            f"СКРИМЕРОВ: {self.scares_triggered}/{len(self.jumpscares)}",
+            f"РАССУДОК: {int(self.sanity)}%",
+            30, 50,
+            arcade.color.WHITE, 20
+        )
+
+        arcade.draw_text(
+            f"СКРИМЕРОВ: {self.scares_triggered}",
             30, 25,
-            (255, 100, 100), 16
+            (255, 100, 100) if self.scares_triggered > 0 else (200, 200, 200), 16
         )
 
         # Время
@@ -442,26 +466,27 @@ class Level1MazeView(arcade.View):
             arcade.color.LIGHT_GRAY, 16
         )
 
-        # Подсказки
+        # Подсказка
+        hints = [
+            "ИЩИТЕ КРАСНЫЙ ВЫХОД",
+            "СКРИМЕРЫ ВСЮДУ...",
+            "LEVEL 1: ТОЛЬКО СКРИМЕРЫ",
+            "ТИШИНА - ХУДШИЙ ВРАГ"
+        ]
+
+        hint_index = (play_time // 10) % len(hints)
+        hint_color = (255, 100, 100) if self.stress > 70 else (255, 200, 100) if self.stress > 50 else (200, 200, 255)
+
         arcade.draw_text(
-            "ИЩИТЕ МИГАЮЩИЙ КРАСНЫЙ ВЫХОД",
+            hints[hint_index],
             self.window.width // 2, self.window.height - 30,
-            (255, 100, 100), 20,
-            anchor_x="center"
+            hint_color, 22,
+            anchor_x="center",
+            bold=True
         )
-
-        arcade.draw_text(
-            "УДЕРЖИВАЙТЕ WASD ДЛЯ ДВИЖЕНИЯ",
-            self.window.width // 2, self.window.height - 60,
-            arcade.color.LIGHT_GRAY, 16,
-            anchor_x="center"
-        )
-
-        # Карта мини (в углу)
-        self.draw_minimap()
 
     def draw_minimap(self):
-        """Мини-карта в углу"""
+        """Мини-карта"""
         map_size = 120
         map_x = self.window.width - map_size - 20
         map_y = self.window.height - map_size - 20
@@ -473,13 +498,13 @@ class Level1MazeView(arcade.View):
             (0, 0, 0, 180)
         )
 
-        # Рисуем клетки карты
         cell_size = map_size / max(self.map_width, self.map_height)
 
+        # Клетки
         for y in range(self.map_height):
             for x in range(self.map_width):
                 cell_x = map_x + x * cell_size
-                cell_y = map_y + (self.map_height - y - 1) * cell_size
+                cell_y = map_y + y * cell_size
 
                 if self.maze[y][x] == 1:
                     arcade.draw_lrbt_rectangle_filled(
@@ -488,15 +513,16 @@ class Level1MazeView(arcade.View):
                         (100, 80, 90)
                     )
                 elif self.maze[y][x] == 2:
-                    arcade.draw_lrbt_rectangle_filled(
-                        cell_x, cell_x + cell_size,
-                        cell_y, cell_y + cell_size,
-                        (255, 50, 50)
-                    )
+                    if int(time.time() * 2) % 2 == 0:
+                        arcade.draw_lrbt_rectangle_filled(
+                            cell_x, cell_x + cell_size,
+                            cell_y, cell_y + cell_size,
+                            (255, 50, 50)
+                        )
 
         # Игрок на карте
         player_map_x = map_x + self.player_x * cell_size
-        player_map_y = map_y + (self.map_height - self.player_y - 1) * cell_size
+        player_map_y = map_y + self.player_y * cell_size
 
         arcade.draw_circle_filled(
             player_map_x, player_map_y,
@@ -504,14 +530,39 @@ class Level1MazeView(arcade.View):
             (100, 150, 255)
         )
 
+        # Скримеры на карте
+        for scare in self.jumpscares:
+            if not scare['triggered'] and scare.get('visible', False):
+                scare_x = map_x + scare['x'] * cell_size
+                scare_y = map_y + scare['y'] * cell_size
+
+                if scare.get('hidden', False):
+                    if int(time.time() * 3) % 2 == 0:
+                        arcade.draw_circle_filled(
+                            scare_x, scare_y,
+                            cell_size * 0.2,
+                            (255, 100, 100, 150)
+                        )
+                else:
+                    arcade.draw_circle_filled(
+                        scare_x, scare_y,
+                        cell_size * 0.2,
+                        (255, 50, 50)
+                    )
+
+        # Рамка
+        arcade.draw_lrbt_rectangle_outline(
+            map_x, map_x + map_size,
+            map_y, map_y + map_size,
+            (180, 180, 180), 2
+        )
+
         arcade.draw_text(
             "КАРТА",
-            map_x + map_size // 2, map_y - 15,
+            map_x + map_size // 2, map_y - 20,
             arcade.color.LIGHT_GRAY, 12,
             anchor_x="center"
         )
-
-    # === УПРАВЛЕНИЕ ===
 
     def on_key_press(self, symbol: int, modifiers: int):
         """Нажатие клавиши"""
@@ -519,20 +570,10 @@ class Level1MazeView(arcade.View):
             self.keys_pressed[symbol] = True
         elif symbol == arcade.key.ESCAPE:
             self.back_to_menu()
-        elif symbol == arcade.key.M:
-            # Телепорт к выходу (для теста)
-            self.player_sprite.center_x = (self.exit_x - 1) * self.tile_size + self.tile_size // 2
-            self.player_sprite.center_y = self.exit_y * self.tile_size + self.tile_size // 2
-            # Обновляем координаты игрока
-            self.player_x = self.player_sprite.center_x / self.tile_size
-            self.player_y = self.player_sprite.center_y / self.tile_size
-        elif symbol == arcade.key.T:
-            # Телепорт к первому скримеру (для теста коллизии)
-            if self.jumpscares:
-                self.player_sprite.center_x = self.jumpscares[0]['x'] * self.tile_size
-                self.player_sprite.center_y = self.jumpscares[0]['y'] * self.tile_size
-                self.player_x = self.player_sprite.center_x / self.tile_size
-                self.player_y = self.player_sprite.center_y / self.tile_size
+        elif symbol == arcade.key.P:
+            # Тест звука скримера
+            if self.sound_manager:
+                self.sound_manager.play_sound('scream', volume=0.5)
 
     def on_key_release(self, symbol: int, modifiers: int):
         """Отпускание клавиши"""
@@ -542,22 +583,14 @@ class Level1MazeView(arcade.View):
     def win_game(self):
         """Победа"""
         play_time = time.time() - self.start_time
-
-        print("=" * 60)
-        print("ПОБЕДА! Вы нашли выход!")
-        print(f"Время: {play_time:.1f} секунд")
-        print(f"Активировано скримеров: {self.scares_triggered}/{len(self.jumpscares)}")
-        print(f"Финальный стресс: {int(self.stress)}%")
-        print("=" * 60)
-
-        # Переходим к завершению
+        # Переход
         from scenes.level1_complete import Level1CompleteView
         complete_view = Level1CompleteView(
             total_jumpscares=len(self.jumpscares),
             triggered_jumpscares=self.scares_triggered,
             play_time=play_time,
             final_stress=self.stress,
-            final_sanity=100 - self.stress // 2,
+            final_sanity=self.sanity,
             distance=math.sqrt((self.exit_x - self.player_x) ** 2 + (self.exit_y - self.player_y) ** 2)
         )
         self.window.show_view(complete_view)

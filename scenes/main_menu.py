@@ -1,60 +1,120 @@
-# main_menu.py
+# main_menu.py - обновленная версия
 import arcade
+from arcade.gui import UIManager, UILabel, UIAnchorLayout, UIBoxLayout, UIFlatButton
 
 
 class MainMenuView(arcade.View):
-    """Главное меню - просто чёрный экран"""
+    """Главное меню с кнопкой правил"""
 
     def __init__(self):
         super().__init__()
-        # Используем arcade.Text для лучшей производительности
-        self.title_text = None
-        self.subtitle_text = None
+        self.ui_manager = UIManager()
+        self.setup_ui()
+
+    def setup_ui(self):
+        """Настроить интерфейс меню"""
+        self.ui_manager.clear()
+
+        anchor = UIAnchorLayout()
+        box = UIBoxLayout(vertical=True, space_between=20)
+
+        # Заголовок
+        title = UILabel(
+            text="FEAR_OS: ПЕРСОНАЛЬНЫЙ КОШМАР",
+            font_size=36,
+            text_color=(136, 8, 8),
+            width=600,
+            align="center"
+        )
+
+        # Подзаголовок
+        subtitle = UILabel(
+            text="Игра анализирует ваши страхи и адаптируется",
+            font_size=20,
+            text_color=(200, 200, 200),
+            width=600,
+            align="center"
+        )
+
+        # Кнопка начала
+        start_btn = UIFlatButton(
+            text="НАЧАТЬ ИГРУ (ЛКМ или ПРОБЕЛ)",
+            width=300,
+            height=50
+        )
+
+        @start_btn.event("on_click")
+        def on_click_start(event):
+            self.start_game()
+
+        # Кнопка правил
+        rules_btn = UIFlatButton(
+            text="ПРАВИЛА ИГРЫ (R)",
+            width=200,
+            height=40
+        )
+
+        @rules_btn.event("on_click")
+        def on_click_rules(event):
+            self.show_rules()
+
+        box.add(title)
+        box.add(subtitle)
+        box.add(start_btn)
+        box.add(rules_btn)
+
+        anchor.add(box)
+        self.ui_manager.add(anchor)
 
     def on_show_view(self):
-        """При показе меню"""
-        print("FEAR_OS: Нажмите ЛКМ для начала")
+        """При показе"""
+        self.ui_manager.enable()
 
-        # Создаем объекты текста
-        self.title_text = arcade.Text(
-            "FEAR_OS",
-            self.window.width // 2,
-            self.window.height // 2,
-            (136, 8, 8),
-            48,
-            anchor_x="center",
-            anchor_y="center"
-        )
-
-        self.subtitle_text = arcade.Text(
-            "НАЖМИТЕ ЛКМ ДЛЯ НАЧАЛА",
-            self.window.width // 2,
-            self.window.height // 2 - 70,
-            arcade.color.WHITE,
-            28,
-            anchor_x="center",
-            anchor_y="center"
-        )
+    def on_hide_view(self):
+        """При скрытии"""
+        self.ui_manager.disable()
 
     def on_draw(self):
         """Отрисовка"""
         self.clear()
         arcade.set_background_color((0, 0, 0))
 
-        # Рисуем текст
-        if self.title_text and self.subtitle_text:
-            self.title_text.draw()
-            self.subtitle_text.draw()
+        # Добавляем атмосферные элементы
+        arcade.draw_text(
+            "Внимание: игра анализирует ваши реакции мыши и клавиатуры",
+            self.window.width // 2,
+            100,
+            (100, 100, 100),
+            14,
+            anchor_x="center"
+        )
+
+        self.ui_manager.draw()
 
     def on_mouse_press(self, x: float, y: float, button: int, modifiers: int):
-        """Обработка клика мыши"""
+        """Клик мыши для начала"""
         if button == arcade.MOUSE_BUTTON_LEFT:
-            self.start_calibration()
+            self.start_game()
 
-    def start_calibration(self):
-        """Начать калибровку"""
-        print("Запуск калибровки...")
+    def on_key_press(self, symbol: int, modifiers: int):
+        """Обработка клавиш"""
+        if symbol == arcade.key.SPACE or symbol == arcade.key.ENTER:
+            self.start_game()
+        elif symbol == arcade.key.R:
+            self.show_rules()
 
+    def start_game(self):
+        """Начать игру"""
         from scenes.fear_calibration import FearCalibrationView
         calibration_view = FearCalibrationView()
         self.window.show_view(calibration_view)
+
+    def show_rules(self):
+        """Показать правила"""
+        try:
+            from rules import RulesManager
+            rules_view = RulesManager.show_rules(self.window, "general")
+            self.window.show_view(rules_view)
+        except ImportError:
+            # Fallback: простой текст
+            print("Правила: Найдите выход, избегайте опасностей")

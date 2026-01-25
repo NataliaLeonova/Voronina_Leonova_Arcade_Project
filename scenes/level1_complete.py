@@ -1,8 +1,9 @@
-# level1_complete.py
+# level1_complete.py - без лишнего вывода
 import arcade
 import json
 import os
 import random
+import time
 from game_state import GameState
 
 
@@ -24,11 +25,7 @@ class Level1CompleteView(arcade.View):
 
         self.texts = []
 
-        print("=" * 60)
-        print("АНАЛИЗ РЕАКЦИЙ В ЛАБИРИНТЕ")
-        print("=" * 60)
-
-        # Сохраняем результаты в GameState
+        # Сохраняем результаты
         game_state = GameState()
         game_state.save_level1_results(self.data)
 
@@ -37,17 +34,13 @@ class Level1CompleteView(arcade.View):
     def save_level_data(self):
         """Сохранить данные уровня"""
         os.makedirs('data', exist_ok=True)
-
         filename = f"data/level1_result_{int(self.data['final_stress'])}.json"
 
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(self.data, f, indent=2, ensure_ascii=False)
 
-        print(f"Данные уровня сохранены: {filename}")
-
     def on_show_view(self):
         """При показе экрана"""
-        # Создаем текстовые объекты
         analysis = self.get_analysis_text()
         lines = analysis.split('\n')
 
@@ -71,7 +64,7 @@ class Level1CompleteView(arcade.View):
 
         # Кнопка для продолжения
         self.texts.append(arcade.Text(
-            "НАЖМИТЕ ПРОБЕЛ ДЛЯ УРОВНЯ 2 (3D ХОРРОР)",
+            "НАЖМИТЕ ПРОБЕЛ ДЛЯ УРОВНЯ 2",
             self.window.width // 2,
             150,
             (136, 8, 8),
@@ -126,7 +119,6 @@ class Level1CompleteView(arcade.View):
         self.clear()
         arcade.set_background_color((20, 10, 40))
 
-        # Кровавые подтеки на фоне
         for _ in range(5):
             x = random.randint(0, self.window.width)
             y = random.randint(0, self.window.height)
@@ -137,7 +129,6 @@ class Level1CompleteView(arcade.View):
                 (100, 20, 20, 50)
             )
 
-        # Рисуем все текстовые объекты
         for text in self.texts:
             text.draw()
 
@@ -151,17 +142,10 @@ class Level1CompleteView(arcade.View):
             self.window.show_view(menu_view)
 
     def start_level2(self):
-        """Запустить второй уровень (3D хоррор)"""
-        print("=" * 60)
-        print("ЗАПУСК УРОВНЯ 2: 3D КОШМАР")
-        print("=" * 60)
-
-        # Получаем профиль из GameState
+        """Запустить второй уровень"""
         game_state = GameState()
         fear_profile = game_state.get_fear_profile()
 
-        # Запускаем 3D игру
         from scenes.horror_3d import Horror3DGame
         game_view = Horror3DGame(fear_profile)
-
         self.window.show_view(game_view)
