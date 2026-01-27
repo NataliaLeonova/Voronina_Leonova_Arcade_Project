@@ -60,20 +60,26 @@ class Level1MazeView(arcade.View):
         self.maze[self.exit_y][self.exit_x] = 2
 
         # === СКРИМЕРЫ ===
-        self.jumpscares = [
-            {'x': 7.5, 'y': 5.5, 'triggered': False, 'visible': True},
-            {'x': 11.5, 'y': 8.5, 'triggered': False, 'visible': True},
-            {'x': 2.5, 'y': 7.5, 'triggered': False, 'visible': True},
-            {'x': 12.5, 'y': 3.5, 'triggered': False, 'visible': True},
-            {'x': 13.5, 'y': 12.5, 'triggered': False, 'visible': False},
-            {'x': 4.5, 'y': 2.5, 'triggered': False, 'visible': True},
-            {'x': 10.5, 'y': 11.5, 'triggered': False, 'visible': True},
-            {'x': 5.5, 'y': 12.5, 'triggered': False, 'visible': True},
-            {'x': 13.5, 'y': 5.5, 'triggered': False, 'visible': True},
-            {'x': 7.5, 'y': 9.5, 'triggered': False, 'visible': True},
-            {'x': 3.5, 'y': 11.5, 'triggered': False, 'visible': False, 'hidden': True, 'activation_range': 2.0},
-            {'x': 8.5, 'y': 2.5, 'triggered': False, 'visible': False, 'hidden': True, 'activation_range': 1.5},
+        self.jumpscares = []
+        # Разные типы лиц скримеров
+        self.scare_types = [
+            'face1',  # Обычное лицо
+            'face2',  # Кривое лицо
+            'face3',  # Злое лицо
+            'face4',  # Глаза
+            'face5',  # Демон
+            'face6',  # Тень
+            'face7',  # Призрак
+            'face8',  # Без лица
+            'face9',  # Смеющееся
+            'face10'  # Шепчущее
         ]
+
+        # Сначала найдем все свободные клетки
+        self.free_cells = self.find_free_cells()
+
+        # Создаем 10 скримеров
+        self.create_jumpscares()
 
         self.active_scare = None
         self.scare_timer = 0
@@ -105,6 +111,53 @@ class Level1MazeView(arcade.View):
         # Настройка
         self.setup()
 
+    def find_free_cells(self):
+        """Найти все свободные клетки в лабиринте"""
+        free_cells = []
+        for y in range(self.map_height):
+            for x in range(self.map_width):
+                if self.maze[y][x] == 0:  # Свободная клетка
+                    free_cells.append((x, y))
+        return free_cells
+
+    def create_jumpscares(self):
+        """Создать 10 скримеров на свободных клетках"""
+        if len(self.free_cells) < 10:
+            print(f"ВНИМАНИЕ: Свободных клеток только {len(self.free_cells)}!")
+
+        # Выбираем 10 случайных свободных клеток
+        selected_cells = random.sample(self.free_cells, min(10, len(self.free_cells)))
+
+        # Создаем скримеры
+        for i, (x, y) in enumerate(selected_cells):
+            # Определяем тип скримера
+            scare_type = self.scare_types[i % len(self.scare_types)]
+
+            # Определяем, скрытый ли это скример (первые 4 - скрытые)
+            is_hidden = i < 4
+
+            # Определяем диапазон активации для скрытых скримеров
+            activation_range = random.uniform(1.2, 2.0) if is_hidden else None
+
+            # Создаем скример
+            scare = {
+                'x': x + 0.5,  # Центр клетки
+                'y': y + 0.5,
+                'triggered': False,
+                'visible': not is_hidden,  # Скрытые невидимы
+                'hidden': is_hidden,
+                'type': scare_type,
+                'activation_range': activation_range if is_hidden else None,
+                'sprite': None
+            }
+
+            self.jumpscares.append(scare)
+
+        print(f"Создано {len(self.jumpscares)} скримеров:")
+        for i, scare in enumerate(self.jumpscares):
+            print(f"  {i + 1}: ({scare['x']:.1f},{scare['y']:.1f}), тип: {scare['type']}, "
+                  f"скрытый: {scare['hidden']}")
+
     def init_sound_manager(self):
         """Инициализировать менеджер звуков ТОЛЬКО для скримеров"""
         try:
@@ -112,6 +165,7 @@ class Level1MazeView(arcade.View):
             self.sound_manager = SoundManager(sound_mode="level1")
             self.sound_manager.set_volume(1.0)
         except Exception as e:
+            print(f"Ошибка загрузки звуков: {e}")
             self.sound_manager = None
 
     def setup(self):
@@ -139,28 +193,47 @@ class Level1MazeView(arcade.View):
                     self.exit_list.append(exit_sprite)
 
         # Скримеры
-        valid_scares = 0
+        print("Создание спрайтов скримеров...")
         for scare in self.jumpscares:
+            # Проверяем, что скример на свободной клетке
             x_int = int(scare['x'])
             y_int = int(scare['y'])
 
-            if 0 <= x_int < self.map_width and 0 <= y_int < self.map_height:
-                if self.maze[y_int][x_int] == 0:
-                    if scare.get('hidden', False):
-                        color = (200, 50, 50, 0)
-                    else:
-                        color = (200, 50, 50, 150 if scare.get('visible', True) else 0)
+            # Определяем цвет в зависимости от типа
+            if scare['type'] == 'face1':
+                color = (255, 50, 50)  # Красный
+            elif scare['type'] == 'face2':
+                color = (255, 100, 0)  # Оранжевый
+            elif scare['type'] == 'face3':
+                color = (200, 0, 100)  # Пурпурный
+            elif scare['type'] == 'face4':
+                color = (100, 100, 255)  # Синий
+            elif scare['type'] == 'face5':
+                color = (150, 0, 0)  # Темно-красный
+            elif scare['type'] == 'face6':
+                color = (50, 50, 50)  # Темный
+            elif scare['type'] == 'face7':
+                color = (200, 200, 255)  # Светло-синий
+            elif scare['type'] == 'face8':
+                color = (100, 100, 100)  # Серый
+            elif scare['type'] == 'face9':
+                color = (255, 200, 0)  # Желтый
+            else:  # face10
+                color = (100, 255, 100)  # Зеленый
 
-                    scare_sprite = arcade.SpriteSolidColor(20, 20, color)
-                    scare_sprite.center_x = scare['x'] * self.tile_size
-                    scare_sprite.center_y = scare['y'] * self.tile_size
-                    scare['sprite'] = scare_sprite
-                    self.scare_list.append(scare_sprite)
-                    valid_scares += 1
-                else:
-                    self.jumpscares.remove(scare)
+            # Определяем прозрачность
+            if scare.get('hidden', False):
+                color_with_alpha = (color[0], color[1], color[2], 0)  # Полностью прозрачный
             else:
-                self.jumpscares.remove(scare)
+                color_with_alpha = (color[0], color[1], color[2], 150)  # Полу-прозрачный
+
+            scare_sprite = arcade.SpriteSolidColor(20, 20, color_with_alpha)
+            scare_sprite.center_x = scare['x'] * self.tile_size
+            scare_sprite.center_y = scare['y'] * self.tile_size
+            scare['sprite'] = scare_sprite
+            self.scare_list.append(scare_sprite)
+            print(f"Скример создан на ({scare['x']:.1f},{scare['y']:.1f}), "
+                  f"тип: {scare['type']}, скрытый: {scare.get('hidden', False)}")
 
         # Игрок
         player_size = int(self.player_radius * self.tile_size * 2)
@@ -196,8 +269,6 @@ class Level1MazeView(arcade.View):
 
     def on_update(self, delta_time: float):
         """Обновление игры"""
-        current_time = time.time()
-
         # Движение (БЕЗ ЗВУКОВ ШАГОВ!)
         move_x = 0
         move_y = 0
@@ -259,18 +330,23 @@ class Level1MazeView(arcade.View):
             self.win_game()
 
     def update_scares(self):
-        """Активация скрытых скримеров"""
+        """Активация скрытых скримеров - ТОЛЬКО один раз"""
         for scare in self.jumpscares:
-            if scare.get('hidden', False) and not scare['triggered'] and scare.get('sprite'):
+            if (scare.get('hidden', False) and
+                    not scare['triggered'] and
+                    scare.get('sprite') and
+                    not scare['visible']):  # Только если еще не виден
+
                 dx = scare['sprite'].center_x - self.player_sprite.center_x
                 dy = scare['sprite'].center_y - self.player_sprite.center_y
                 distance = math.sqrt(dx * dx + dy * dy) / self.tile_size
 
-                activation_range = scare.get('activation_range', 2.0)
+                activation_range = scare.get('activation_range', 1.5)
 
                 if distance < activation_range:
                     scare['visible'] = True
-                    scare['sprite'].alpha = 255
+                    scare['sprite'].alpha = 150  # Делаем видимым
+                    print(f"Скрытый скример {scare['type']} на ({scare['x']:.1f},{scare['y']:.1f}) активирован!")
 
     def check_scares(self):
         """Проверка активации скримеров"""
@@ -279,6 +355,81 @@ class Level1MazeView(arcade.View):
                 if arcade.check_for_collision(self.player_sprite, scare['sprite']):
                     self.trigger_scare(scare)
                     break
+
+    def draw_scare_face(self, x, y, scare_type, size, alpha):
+        """Рисуем разные лица скримеров"""
+        if scare_type == 'face1':  # Обычное лицо
+            arcade.draw_circle_filled(x, y, size, (255, 50, 50, alpha))
+            arcade.draw_circle_filled(x - size * 0.3, y + size * 0.2, size * 0.25, (255, 255, 255, alpha))
+            arcade.draw_circle_filled(x + size * 0.3, y + size * 0.2, size * 0.25, (255, 255, 255, alpha))
+            arcade.draw_circle_filled(x - size * 0.3, y + size * 0.2, size * 0.1, (0, 0, 0, alpha))
+            arcade.draw_circle_filled(x + size * 0.3, y + size * 0.2, size * 0.1, (0, 0, 0, alpha))
+            arcade.draw_ellipse_filled(x, y - size * 0.3, size * 0.6, size * 0.3, (200, 0, 0, alpha))
+
+        elif scare_type == 'face2':  # Кривое лицо
+            arcade.draw_circle_filled(x, y, size, (255, 100, 0, alpha))
+            arcade.draw_circle_filled(x - size * 0.25, y + size * 0.3, size * 0.2, (255, 255, 255, alpha))
+            arcade.draw_circle_filled(x + size * 0.35, y + size * 0.25, size * 0.2, (255, 255, 255, alpha))
+            arcade.draw_circle_filled(x - size * 0.25, y + size * 0.3, size * 0.08, (0, 0, 0, alpha))
+            arcade.draw_circle_filled(x + size * 0.35, y + size * 0.25, size * 0.08, (0, 0, 0, alpha))
+            arcade.draw_arc_filled(x, y - size * 0.2, size * 0.7, size * 0.4, (200, 50, 0, alpha), 0, 180)
+
+        elif scare_type == 'face3':  # Злое лицо
+            arcade.draw_circle_filled(x, y, size, (200, 0, 100, alpha))
+            arcade.draw_triangle_filled(x - size * 0.4, y + size * 0.3, x - size * 0.2, y + size * 0.1, x - size * 0.6,
+                                        y + size * 0.1, (255, 255, 255, alpha))
+            arcade.draw_triangle_filled(x + size * 0.4, y + size * 0.3, x + size * 0.2, y + size * 0.1, x + size * 0.6,
+                                        y + size * 0.1, (255, 255, 255, alpha))
+            arcade.draw_line(x, y - size * 0.1, x, y - size * 0.4, (100, 0, 50, alpha), 3)
+
+        elif scare_type == 'face4':  # Глаза
+            arcade.draw_ellipse_filled(x, y, size * 1.5, size, (100, 100, 255, alpha))
+            arcade.draw_circle_filled(x - size * 0.4, y, size * 0.35, (255, 255, 255, alpha))
+            arcade.draw_circle_filled(x + size * 0.4, y, size * 0.35, (255, 255, 255, alpha))
+            arcade.draw_circle_filled(x - size * 0.4, y, size * 0.15, (0, 0, 0, alpha))
+            arcade.draw_circle_filled(x + size * 0.4, y, size * 0.15, (0, 0, 0, alpha))
+
+        elif scare_type == 'face5':  # Демон
+            arcade.draw_circle_filled(x, y, size, (150, 0, 0, alpha))
+            arcade.draw_triangle_filled(x, y + size * 1.2, x - size * 0.5, y + size * 0.5, x + size * 0.5,
+                                        y + size * 0.5, (150, 0, 0, alpha))
+            arcade.draw_circle_filled(x - size * 0.3, y + size * 0.1, size * 0.25, (255, 200, 200, alpha))
+            arcade.draw_circle_filled(x + size * 0.3, y + size * 0.1, size * 0.25, (255, 200, 200, alpha))
+            arcade.draw_ellipse_filled(x, y - size * 0.4, size * 0.8, size * 0.3, (100, 0, 0, alpha))
+
+        elif scare_type == 'face6':  # Тень
+            for i in range(3):
+                shadow_size = size * (1 - i * 0.2)
+                shadow_alpha = alpha * (0.7 - i * 0.2)
+                arcade.draw_circle_filled(x + random.uniform(-5, 5), y + random.uniform(-5, 5),
+                                          shadow_size, (50, 50, 50, int(shadow_alpha)))
+
+        elif scare_type == 'face7':  # Призрак
+            arcade.draw_circle_filled(x, y + size * 0.2, size * 0.8, (200, 200, 255, alpha))
+            arcade.draw_ellipse_filled(x, y - size * 0.3, size, size * 0.6, (200, 200, 255, alpha))
+            arcade.draw_circle_filled(x - size * 0.3, y + size * 0.3, size * 0.2, (100, 100, 150, alpha))
+            arcade.draw_circle_filled(x + size * 0.3, y + size * 0.3, size * 0.2, (100, 100, 150, alpha))
+
+        elif scare_type == 'face8':  # Без лица
+            arcade.draw_circle_filled(x, y, size, (100, 100, 100, alpha))
+            # ИСПРАВЛЕННАЯ СТРОКА: используем draw_lrbt_rectangle_filled
+            arcade.draw_lrbt_rectangle_filled(
+                x - size * 0.4, x + size * 0.4,
+                y - size * 0.05, y + size * 0.05,
+                (70, 70, 70, alpha)
+            )
+
+        elif scare_type == 'face9':  # Смеющееся
+            arcade.draw_circle_filled(x, y, size, (255, 200, 0, alpha))
+            arcade.draw_arc_filled(x, y, size * 0.6, size * 0.6, (200, 150, 0, alpha), 0, 180)
+            arcade.draw_circle_filled(x - size * 0.3, y + size * 0.2, size * 0.15, (255, 255, 255, alpha))
+            arcade.draw_circle_filled(x + size * 0.3, y + size * 0.2, size * 0.15, (255, 255, 255, alpha))
+
+        else:  # face10 - Шепчущее
+            arcade.draw_circle_filled(x, y, size, (100, 255, 100, alpha))
+            arcade.draw_ellipse_filled(x, y, size * 0.5, size * 0.3, (50, 200, 50, alpha))
+            arcade.draw_line(x - size * 0.2, y + size * 0.1, x - size * 0.4, y + size * 0.3, (50, 200, 50, alpha), 2)
+            arcade.draw_line(x + size * 0.2, y + size * 0.1, x + size * 0.4, y + size * 0.3, (50, 200, 50, alpha), 2)
 
     def trigger_scare(self, scare):
         """Активировать скример"""
@@ -298,10 +449,12 @@ class Level1MazeView(arcade.View):
         self.blood_overlay = 0.3 + random.random() * 0.2
         self.vignette_darkness = 0.2
 
-        # ЗВУК СКРИМЕРА (единственный звук в Level 1)
+        # ЗВУК СКРИМЕРА
         if self.sound_manager:
             volume = 0.8 + random.random() * 0.2
-            success = self.sound_manager.play_sound('scream', volume=volume)
+            self.sound_manager.play_sound('scream', volume=volume)
+
+        print(f"Скример {scare['type']} активирован! Всего: {self.scares_triggered}/10")
 
     def on_draw(self):
         """Отрисовка"""
@@ -350,12 +503,12 @@ class Level1MazeView(arcade.View):
                 x = scare['sprite'].center_x - self.camera_x + shake_x
                 y = scare['sprite'].center_y - self.camera_y + shake_y
 
-                if scare.get('hidden', False):
-                    if random.random() < 0.1:
-                        arcade.draw_circle_filled(x, y, 12, (150, 50, 150, 100))
-                else:
-                    if random.random() < 0.15:
-                        arcade.draw_circle_filled(x, y, 10, (200, 50, 50))
+                # Рисуем индикатор скримера
+                if random.random() < 0.2:  # Мигающий эффект
+                    if scare.get('hidden', False):
+                        arcade.draw_circle_filled(x, y, 8, (150, 50, 150, 100))
+                    else:
+                        arcade.draw_circle_filled(x, y, 8, (255, 100, 100, 100))
 
         # Активный скример
         if self.active_scare and self.scare_timer > 0:
@@ -366,12 +519,8 @@ class Level1MazeView(arcade.View):
             size = 80 + (1.0 - self.scare_timer / 0.8) * 40
             alpha = int(255 * (self.scare_timer / 0.8))
 
-            arcade.draw_circle_filled(x, y, size, (150, 0, 0, alpha))
-            arcade.draw_circle_filled(x - 25, y + 15, 20, (255, 255, 255, alpha))
-            arcade.draw_circle_filled(x + 25, y + 15, 20, (255, 255, 255, alpha))
-            arcade.draw_circle_filled(x - 25, y + 15, 8, (0, 0, 0, alpha))
-            arcade.draw_circle_filled(x + 25, y + 15, 8, (0, 0, 0, alpha))
-            arcade.draw_ellipse_filled(x, y - 25, 50, 25, (200, 0, 0, alpha))
+            # Рисуем лицо скримера в зависимости от типа
+            self.draw_scare_face(x, y, scare['type'], size, alpha)
 
         # Игрок
         player_x = self.player_sprite.center_x - self.camera_x + shake_x
@@ -402,7 +551,7 @@ class Level1MazeView(arcade.View):
         # Интерфейс
         self.draw_hud()
 
-        # МИНИ-КАРТА (добавляем в конце)
+        # МИНИ-КАРТА
         self.draw_minimap()
 
     def draw_hud(self):
@@ -453,7 +602,7 @@ class Level1MazeView(arcade.View):
         )
 
         arcade.draw_text(
-            f"СКРИМЕРОВ: {self.scares_triggered}",
+            f"СКРИМЕРОВ: {self.scares_triggered}/10",
             30, 25,
             (255, 100, 100) if self.scares_triggered > 0 else (200, 200, 200), 16
         )
@@ -469,9 +618,10 @@ class Level1MazeView(arcade.View):
         # Подсказка
         hints = [
             "ИЩИТЕ КРАСНЫЙ ВЫХОД",
-            "СКРИМЕРЫ ВСЮДУ...",
+            "СКРИМЕРОВ: 10 ШТУК",
             "LEVEL 1: ТОЛЬКО СКРИМЕРЫ",
-            "ТИШИНА - ХУДШИЙ ВРАГ"
+            "ТИШИНА - ХУДШИЙ ВРАГ",
+            f"Найдено скримеров: {self.scares_triggered}/10"
         ]
 
         hint_index = (play_time // 10) % len(hints)
@@ -532,22 +682,37 @@ class Level1MazeView(arcade.View):
 
         # Скримеры на карте
         for scare in self.jumpscares:
-            if not scare['triggered'] and scare.get('visible', False):
+            if not scare['triggered']:
                 scare_x = map_x + scare['x'] * cell_size
                 scare_y = map_y + scare['y'] * cell_size
 
-                if scare.get('hidden', False):
-                    if int(time.time() * 3) % 2 == 0:
-                        arcade.draw_circle_filled(
-                            scare_x, scare_y,
-                            cell_size * 0.2,
-                            (255, 100, 100, 150)
-                        )
-                else:
+                if scare.get('visible', False):
+                    # Определяем цвет в зависимости от типа
+                    if scare['type'] == 'face1':
+                        color = (255, 50, 50)
+                    elif scare['type'] == 'face2':
+                        color = (255, 100, 0)
+                    elif scare['type'] == 'face3':
+                        color = (200, 0, 100)
+                    elif scare['type'] == 'face4':
+                        color = (100, 100, 255)
+                    elif scare['type'] == 'face5':
+                        color = (150, 0, 0)
+                    elif scare['type'] == 'face6':
+                        color = (50, 50, 50)
+                    elif scare['type'] == 'face7':
+                        color = (200, 200, 255)
+                    elif scare['type'] == 'face8':
+                        color = (100, 100, 100)
+                    elif scare['type'] == 'face9':
+                        color = (255, 200, 0)
+                    else:  # face10
+                        color = (100, 255, 100)
+
                     arcade.draw_circle_filled(
                         scare_x, scare_y,
-                        cell_size * 0.2,
-                        (255, 50, 50)
+                        cell_size * 0.15,
+                        color
                     )
 
         # Рамка
@@ -574,6 +739,15 @@ class Level1MazeView(arcade.View):
             # Тест звука скримера
             if self.sound_manager:
                 self.sound_manager.play_sound('scream', volume=0.5)
+        elif symbol == arcade.key.T:
+            # Тест: вывести информацию о скримерах
+            print(f"=== ИНФОРМАЦИЯ О СКРИМЕРАХ ===")
+            visible_count = sum(1 for s in self.jumpscares if s.get('visible', False))
+            triggered_count = sum(1 for s in self.jumpscares if s['triggered'])
+            print(f"Всего: {len(self.jumpscares)}, Видимых: {visible_count}, Активировано: {triggered_count}")
+            for i, scare in enumerate(self.jumpscares):
+                print(f"{i + 1}: тип={scare['type']}, ({scare['x']:.1f},{scare['y']:.1f}), "
+                      f"виден={scare.get('visible', False)}, активирован={scare['triggered']}")
 
     def on_key_release(self, symbol: int, modifiers: int):
         """Отпускание клавиши"""
