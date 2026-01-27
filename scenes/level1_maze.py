@@ -7,6 +7,242 @@ import os
 from data_models import CalibrationData
 
 
+class Level1InstructionView(arcade.View):
+    """Экран с инструкцией перед Level 1"""
+
+    def __init__(self, calibration_data: CalibrationData):
+        super().__init__()
+        self.calibration_data = calibration_data
+        self.start_time = time.time()
+        self.fade_alpha = 0
+        self.show_controls = False
+        self.show_warning = False
+
+    def on_show_view(self):
+        """При показе вида"""
+        arcade.set_background_color((0, 0, 0))
+
+    def on_update(self, delta_time: float):
+        """Обновление анимации"""
+        elapsed = time.time() - self.start_time
+
+        # Анимация появления
+        if elapsed < 1.0:
+            self.fade_alpha = min(255, int(elapsed * 255))
+        elif elapsed < 3.0:
+            self.show_controls = True
+        elif elapsed < 6.0:
+            self.show_warning = True
+        elif elapsed > 8.0:
+            # Переход к уровню
+            from scenes.level1_maze import Level1MazeView
+            level_view = Level1MazeView(self.calibration_data)
+            self.window.show_view(level_view)
+
+    def on_draw(self):
+        """Отрисовка инструкции"""
+        self.clear()
+
+        # Фон
+        arcade.draw_lrbt_rectangle_filled(
+            0, self.window.width,
+            0, self.window.height,
+            (0, 0, 0)
+        )
+
+        # Заголовок
+        title_color = (255, 50, 50, self.fade_alpha)
+        arcade.draw_text(
+            "LEVEL 1: ТИШИНА",
+            self.window.width // 2, self.window.height - 150,
+            title_color, 48,
+            anchor_x="center",
+            bold=True
+        )
+
+        # Подзаголовок
+        subtitle_color = (200, 200, 255, self.fade_alpha)
+        arcade.draw_text(
+            "Только скримеры...",
+            self.window.width // 2, self.window.height - 220,
+            subtitle_color, 24,
+            anchor_x="center"
+        )
+
+        # Управление
+        if self.show_controls:
+            controls_alpha = min(255, int((time.time() - self.start_time - 1.0) * 255))
+
+            # Рамка для управления
+            arcade.draw_lrbt_rectangle_filled(
+                self.window.width // 2 - 200, self.window.width // 2 + 200,
+                self.window.height // 2 - 150, self.window.height // 2 + 150,
+                (20, 10, 30, controls_alpha // 2)
+            )
+
+            # Заголовок управления
+            arcade.draw_text(
+                "УПРАВЛЕНИЕ",
+                self.window.width // 2, self.window.height // 2 + 100,
+                (255, 200, 100, controls_alpha), 32,
+                anchor_x="center",
+                bold=True
+            )
+
+            # Клавиши
+            key_color = (100, 200, 255, controls_alpha)
+            key_bg = (50, 50, 100, controls_alpha // 2)
+
+            # W
+            arcade.draw_lrbt_rectangle_filled(
+                self.window.width // 2 - 40, self.window.width // 2 + 40,
+                self.window.height // 2 + 20, self.window.height // 2 + 60,
+                key_bg
+            )
+            arcade.draw_text(
+                "W",
+                self.window.width // 2, self.window.height // 2 + 40,
+                key_color, 28,
+                anchor_x="center", anchor_y="center",
+                bold=True
+            )
+            arcade.draw_text(
+                "ВПЕРЕД",
+                self.window.width // 2 + 80, self.window.height // 2 + 40,
+                (200, 200, 200, controls_alpha), 20,
+                anchor_y="center"
+            )
+
+            # A и D
+            arcade.draw_text(
+                "A",
+                self.window.width // 2 - 100, self.window.height // 2 - 20,
+                key_color, 28,
+                anchor_x="center", anchor_y="center",
+                bold=True
+            )
+            arcade.draw_text(
+                "D",
+                self.window.width // 2 + 100, self.window.height // 2 - 20,
+                key_color, 28,
+                anchor_x="center", anchor_y="center",
+                bold=True
+            )
+
+            arcade.draw_lrbt_rectangle_filled(
+                self.window.width // 2 - 140, self.window.width // 2 - 60,
+                self.window.height // 2 - 40, self.window.height // 2,
+                key_bg
+            )
+            arcade.draw_text(
+                "← ВЛЕВО",
+                self.window.width // 2 - 140, self.window.height // 2 - 20,
+                (200, 200, 200, controls_alpha), 18,
+                anchor_x="left", anchor_y="center"
+            )
+
+            arcade.draw_lrbt_rectangle_filled(
+                self.window.width // 2 + 60, self.window.width // 2 + 140,
+                self.window.height // 2 - 40, self.window.height // 2,
+                key_bg
+            )
+            arcade.draw_text(
+                "ВПРАВО →",
+                self.window.width // 2 + 140, self.window.height // 2 - 20,
+                (200, 200, 200, controls_alpha), 18,
+                anchor_x="right", anchor_y="center"
+            )
+
+            # S
+            arcade.draw_lrbt_rectangle_filled(
+                self.window.width // 2 - 40, self.window.width // 2 + 40,
+                self.window.height // 2 - 100, self.window.height // 2 - 60,
+                key_bg
+            )
+            arcade.draw_text(
+                "S",
+                self.window.width // 2, self.window.height // 2 - 80,
+                key_color, 28,
+                anchor_x="center", anchor_y="center",
+                bold=True
+            )
+            arcade.draw_text(
+                "НАЗАД",
+                self.window.width // 2 + 80, self.window.height // 2 - 80,
+                (200, 200, 200, controls_alpha), 20,
+                anchor_y="center"
+            )
+
+            # Подсказка
+            hint_alpha = int((math.sin(time.time() * 3) + 1) / 2 * controls_alpha)
+            arcade.draw_text(
+                "ESC - выход в меню",
+                self.window.width // 2, self.window.height // 2 - 150,
+                (150, 150, 150, hint_alpha), 16,
+                anchor_x="center"
+            )
+
+        # Предупреждение о скримерах
+        if self.show_warning:
+            warning_time = time.time() - self.start_time - 3.0
+            warning_alpha = min(255, int(warning_time * 255))
+
+            # Мигающий текст
+            blink = int((math.sin(time.time() * 5) + 1) / 2 * warning_alpha)
+
+            arcade.draw_text(
+                "ВНИМАНИЕ:",
+                self.window.width // 2, 300,
+                (255, 50, 50, warning_alpha), 36,
+                anchor_x="center",
+                bold=True
+            )
+
+            arcade.draw_text(
+                "В лабиринте 10 скримеров",
+                self.window.width // 2, 250,
+                (255, 150, 150, warning_alpha), 24,
+                anchor_x="center"
+            )
+
+            arcade.draw_text(
+                "4 из них скрыты и появляются при приближении",
+                self.window.width // 2, 220,
+                (255, 200, 200, warning_alpha), 20,
+                anchor_x="center"
+            )
+
+            arcade.draw_text(
+                "Будьте готовы...",
+                self.window.width // 2, 150,
+                (255, 100, 100, blink), 28,
+                anchor_x="center",
+                bold=True
+            )
+
+        # Таймер до начала
+        if self.show_warning:
+            time_left = max(0, 8.0 - (time.time() - self.start_time))
+            arcade.draw_text(
+                f"Начало через: {time_left:.1f}",
+                self.window.width // 2, 50,
+                (200, 200, 255, warning_alpha), 20,
+                anchor_x="center"
+            )
+
+    def on_key_press(self, symbol: int, modifiers: int):
+        """Пропустить инструкцию по нажатию любой клавиши"""
+        if symbol == arcade.key.ESCAPE:
+            from scenes.main_menu import MainMenuView
+            menu_view = MainMenuView()
+            self.window.show_view(menu_view)
+        else:
+            # Любая другая клавиша пропускает инструкцию
+            from scenes.level1_maze import Level1MazeView
+            level_view = Level1MazeView(self.calibration_data)
+            self.window.show_view(level_view)
+
+
 class Level1MazeView(arcade.View):
     """Level 1: ТОЛЬКО звуки скримеров, НИКАКИХ других звуков"""
 
@@ -107,6 +343,7 @@ class Level1MazeView(arcade.View):
 
         # Время
         self.start_time = time.time()
+        self.show_hint_time = time.time() + 2.0  # Показывать подсказку 2 секунды
 
         # Настройка
         self.setup()
@@ -195,10 +432,6 @@ class Level1MazeView(arcade.View):
         # Скримеры
         print("Создание спрайтов скримеров...")
         for scare in self.jumpscares:
-            # Проверяем, что скример на свободной клетке
-            x_int = int(scare['x'])
-            y_int = int(scare['y'])
-
             # Определяем цвет в зависимости от типа
             if scare['type'] == 'face1':
                 color = (255, 50, 50)  # Красный
@@ -551,6 +784,27 @@ class Level1MazeView(arcade.View):
         # Интерфейс
         self.draw_hud()
 
+        # Подсказка об управлении (показывается первые 5 секунд)
+        if time.time() - self.start_time < 5.0:
+            hint_alpha = min(255, int((5.0 - (time.time() - self.start_time)) * 255))
+            hint_bg_alpha = hint_alpha // 3
+
+            # Фон подсказки
+            arcade.draw_lrbt_rectangle_filled(
+                self.window.width // 2 - 250, self.window.width // 2 + 250,
+                self.window.height - 100, self.window.height - 20,
+                (0, 0, 0, hint_bg_alpha)
+            )
+
+            # Текст подсказки
+            arcade.draw_text(
+                "Управление: W A S D  |  ESC - меню",
+                self.window.width // 2, self.window.height - 60,
+                (255, 255, 200, hint_alpha), 20,
+                anchor_x="center", anchor_y="center",
+                bold=True
+            )
+
         # МИНИ-КАРТА
         self.draw_minimap()
 
@@ -620,7 +874,7 @@ class Level1MazeView(arcade.View):
             "ИЩИТЕ КРАСНЫЙ ВЫХОД",
             "СКРИМЕРОВ: 10 ШТУК",
             "LEVEL 1: ТОЛЬКО СКРИМЕРЫ",
-            "ТИШИНА - ХУДШИЙ ВРАГ",
+            "ТИШИНА - ХУЖШИЙ ВРАГ",
             f"Найдено скримеров: {self.scares_triggered}/10"
         ]
 
@@ -682,38 +936,37 @@ class Level1MazeView(arcade.View):
 
         # Скримеры на карте
         for scare in self.jumpscares:
-            if not scare['triggered']:
+            if not scare['triggered'] and scare.get('visible', False):
                 scare_x = map_x + scare['x'] * cell_size
                 scare_y = map_y + scare['y'] * cell_size
 
-                if scare.get('visible', False):
-                    # Определяем цвет в зависимости от типа
-                    if scare['type'] == 'face1':
-                        color = (255, 50, 50)
-                    elif scare['type'] == 'face2':
-                        color = (255, 100, 0)
-                    elif scare['type'] == 'face3':
-                        color = (200, 0, 100)
-                    elif scare['type'] == 'face4':
-                        color = (100, 100, 255)
-                    elif scare['type'] == 'face5':
-                        color = (150, 0, 0)
-                    elif scare['type'] == 'face6':
-                        color = (50, 50, 50)
-                    elif scare['type'] == 'face7':
-                        color = (200, 200, 255)
-                    elif scare['type'] == 'face8':
-                        color = (100, 100, 100)
-                    elif scare['type'] == 'face9':
-                        color = (255, 200, 0)
-                    else:  # face10
-                        color = (100, 255, 100)
+                # Определяем цвет в зависимости от типа
+                if scare['type'] == 'face1':
+                    color = (255, 50, 50)
+                elif scare['type'] == 'face2':
+                    color = (255, 100, 0)
+                elif scare['type'] == 'face3':
+                    color = (200, 0, 100)
+                elif scare['type'] == 'face4':
+                    color = (100, 100, 255)
+                elif scare['type'] == 'face5':
+                    color = (150, 0, 0)
+                elif scare['type'] == 'face6':
+                    color = (50, 50, 50)
+                elif scare['type'] == 'face7':
+                    color = (200, 200, 255)
+                elif scare['type'] == 'face8':
+                    color = (100, 100, 100)
+                elif scare['type'] == 'face9':
+                    color = (255, 200, 0)
+                else:  # face10
+                    color = (100, 255, 100)
 
-                    arcade.draw_circle_filled(
-                        scare_x, scare_y,
-                        cell_size * 0.15,
-                        color
-                    )
+                arcade.draw_circle_filled(
+                    scare_x, scare_y,
+                    cell_size * 0.15,
+                    color
+                )
 
         # Рамка
         arcade.draw_lrbt_rectangle_outline(
