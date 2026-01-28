@@ -1,4 +1,3 @@
-# horror_3d.py - ИСПРАВЛЕННАЯ ВЕРСИЯ (убраны лишние надписи, исправлена инструкция)
 import arcade
 import random
 import math
@@ -40,6 +39,15 @@ class Monster:
     patrol_index: int = 0
     last_seen_time: float = 0
     is_hunting: bool = False
+    move_timer: float = 0
+    move_delay: float = random.uniform(3.0, 8.0)  # УВЕЛИЧЕНА ЧАСТОТА ПЕРЕМЕЩЕНИЙ
+    idle_timer: float = 0
+    idle_duration: float = random.uniform(2.0, 5.0)
+    is_idle: bool = False
+    wander_range: float = 15.0  # РАДИУС БЛУЖДАНИЯ
+    spawn_x: float = 0
+    spawn_y: float = 0
+    next_wander_target: Optional[Tuple[float, float]] = None
 
 
 @dataclass
@@ -108,66 +116,88 @@ class BehaviorData:
 
 
 class MazeGenerator:
-    """Генератор сложных лабиринтов"""
+    """Генератор сложных лабиринтов с улучшенным алгоритмом"""
 
     @staticmethod
     def generate_perfect_maze(width: int, height: int) -> List[List[int]]:
         """Генерация совершенного лабиринта (1-стены, 0-проходы)"""
+        # Убедимся, что размеры нечетные для правильного лабиринта
+        if width % 2 == 0:
+            width += 1
+        if height % 2 == 0:
+            height += 1
+
+        # Инициализируем полностью заполненный лабиринт
         maze = [[1 for _ in range(width)] for _ in range(height)]
 
+        # Начальная точка - центр лабиринта
         start_x, start_y = width // 2, height // 2
-        stack = [(start_x, start_y)]
+        if start_x % 2 == 0:
+            start_x -= 1
+        if start_y % 2 == 0:
+            start_y -= 1
+
         maze[start_y][start_x] = 0
 
+        # Стек для алгоритма
+        stack = [(start_x, start_y)]
+        visited = set()
+        visited.add((start_x, start_y))
+
+        # Все возможные направления (шаг 2 клетки)
         directions = [(0, -2), (2, 0), (0, 2), (-2, 0)]
 
         while stack:
             x, y = stack[-1]
-            random.shuffle(directions)
 
-            found = False
+            # Получаем непосещенных соседей
+            neighbors = []
             for dx, dy in directions:
                 nx, ny = x + dx, y + dy
 
-                if (1 <= nx < width - 1 and 1 <= ny < height - 1 and
-                        maze[ny][nx] == 1):
-                    maze[y + dy // 2][x + dx // 2] = 0
-                    maze[ny][nx] = 0
-                    stack.append((nx, ny))
-                    found = True
-                    break
+                # Проверяем границы
+                if 0 <= nx < width and 0 <= ny < height:
+                    # Проверяем, что это потенциальная проходимая клетка
+                    if maze[ny][nx] == 1 and (nx, ny) not in visited:
+                        # Проверяем, что вокруг есть стены
+                        wall_count = 0
+                        for wx, wy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                            cx, cy = nx + wx, ny + wy
+                            if 0 <= cx < width and 0 <= cy < height and maze[cy][cx] == 1:
+                                wall_count += 1
+                        if wall_count >= 3:  # Должно быть окружено стенами
+                            neighbors.append((nx, ny, dx, dy))
 
-            if not found:
+            if neighbors:
+                # Выбираем случайного соседа
+                nx, ny, dx, dy = random.choice(neighbors)
+
+                # Убираем стену между текущей клеткой и соседом
+                maze[y + dy // 2][x + dx // 2] = 0
+                maze[ny][nx] = 0
+
+                # Добавляем в посещенные и стек
+                visited.add((nx, ny))
+                stack.append((nx, ny))
+            else:
+                # Возвращаемся назад
                 stack.pop()
 
-        center_size = 3
-        center_x, center_y = width // 2, height // 2
-        for dy in range(-center_size, center_size + 1):
-            for dx in range(-center_size, center_size + 1):
-                nx, ny = center_x + dx, center_y + dy
-                if 0 <= nx < width and 0 <= ny < height:
-                    maze[ny][nx] = 0
+        # УБЕДИТЕЛЬНО ОБЕСПЕЧИВАЕМ СВЯЗНОСТЬ
+        MazeGenerator._ensure_perfect_connectivity(maze, width, height)
 
-        for _ in range(width * height // 20):
-            x = random.randint(1, width - 2)
-            y = random.randint(1, height - 2)
-            if maze[y][x] == 1:
-                walls = 0
-                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < width and 0 <= ny < height:
-                        if maze[ny][nx] == 1:
-                            walls += 1
-                if walls >= 3:
-                    maze[y][x] = 0
+        # Создаем несколько дополнительных проходов для лучшей проходимости
+        MazeGenerator._add_extra_passages(maze, width, height)
 
-        MazeGenerator._ensure_connectivity(maze, width, height)
+        # Гарантируем, что все мертвые зоны соединены
+        MazeGenerator._connect_dead_ends(maze, width, height)
 
         return maze
 
     @staticmethod
-    def _ensure_connectivity(maze: List[List[int]], width: int, height: int):
+    def _ensure_perfect_connectivity(maze: List[List[int]], width: int, height: int):
         """Гарантировать, что лабиринт полностью проходим"""
+        # Находим все проходимые клетки
         passages = []
         for y in range(height):
             for x in range(width):
@@ -177,6 +207,7 @@ class MazeGenerator:
         if not passages:
             return
 
+        # Проверяем связность через поиск в ширину
         start = passages[0]
         visited = set()
         queue = deque([start])
@@ -188,15 +219,18 @@ class MazeGenerator:
 
             visited.add((x, y))
 
+            # Проверяем всех соседей
             for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                 nx, ny = x + dx, y + dy
                 if (0 <= nx < width and 0 <= ny < height and
                         maze[ny][nx] == 0 and (nx, ny) not in visited):
                     queue.append((nx, ny))
 
-        if len(visited) < len(passages):
-            unvisited = [p for p in passages if p not in visited]
+        # Если есть непосещенные проходы, соединяем их
+        unvisited = [p for p in passages if p not in visited]
+        if unvisited:
             for ux, uy in unvisited:
+                # Ищем ближайший посещенный проход
                 min_dist = float('inf')
                 nearest = None
                 for vx, vy in visited:
@@ -207,15 +241,165 @@ class MazeGenerator:
 
                 if nearest:
                     vx, vy = nearest
-                    while ux != vx or uy != vy:
-                        if random.random() < 0.5 and ux != vx:
-                            ux += 1 if ux < vx else -1
+                    # Прокладываем путь
+                    cx, cy = ux, uy
+                    while (cx, cy) != (vx, vy):
+                        if random.random() < 0.5 and cx != vx:
+                            cx += 1 if cx < vx else -1
                         else:
-                            uy += 1 if uy < vy else -1
+                            cy += 1 if cy < vy else -1
 
-                        if 0 <= ux < width and 0 <= uy < height:
-                            maze[uy][ux] = 0
-                            visited.add((ux, uy))
+                        if 0 <= cx < width and 0 <= cy < height:
+                            maze[cy][cx] = 0
+                            visited.add((cx, cy))
+
+        # Убедимся, что нет изолированных областей
+        MazeGenerator._check_and_fix_islands(maze, width, height)
+
+    @staticmethod
+    def _check_and_fix_islands(maze: List[List[int]], width: int, height: int):
+        """Проверить и исправить изолированные области"""
+        visited_all = set()
+        islands = []
+
+        for y in range(height):
+            for x in range(width):
+                if maze[y][x] == 0 and (x, y) not in visited_all:
+                    # Новая область
+                    island = []
+                    queue = deque([(x, y)])
+                    visited_island = set()
+
+                    while queue:
+                        cx, cy = queue.popleft()
+                        if (cx, cy) in visited_island:
+                            continue
+
+                        visited_island.add((cx, cy))
+                        island.append((cx, cy))
+
+                        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                            nx, ny = cx + dx, cy + dy
+                            if (0 <= nx < width and 0 <= ny < height and
+                                    maze[ny][nx] == 0 and (nx, ny) not in visited_island):
+                                queue.append((nx, ny))
+
+                    islands.append(island)
+                    visited_all.update(visited_island)
+
+        # Если больше одного острова, соединяем их
+        if len(islands) > 1:
+            for i in range(1, len(islands)):
+                # Соединяем текущий остров с предыдущим
+                island1 = islands[i - 1]
+                island2 = islands[i]
+
+                # Находим ближайшие точки
+                min_dist = float('inf')
+                point1 = None
+                point2 = None
+
+                for x1, y1 in island1:
+                    for x2, y2 in island2:
+                        dist = abs(x1 - x2) + abs(y1 - y2)
+                        if dist < min_dist:
+                            min_dist = dist
+                            point1 = (x1, y1)
+                            point2 = (x2, y2)
+
+                if point1 and point2:
+                    x1, y1 = point1
+                    x2, y2 = point2
+
+                    # Прокладываем путь
+                    cx, cy = x1, y1
+                    while (cx, cy) != (x2, y2):
+                        if random.random() < 0.5 and cx != x2:
+                            cx += 1 if cx < x2 else -1
+                        else:
+                            cy += 1 if cy < y2 else -1
+
+                        if 0 <= cx < width and 0 <= cy < height:
+                            maze[cy][cx] = 0
+
+                            # Также убираем стены вокруг для плавности
+                            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                                nx, ny = cx + dx, cy + dy
+                                if 0 <= nx < width and 0 <= ny < height and random.random() < 0.3:
+                                    maze[ny][nx] = 0
+
+    @staticmethod
+    def _add_extra_passages(maze: List[List[int]], width: int, height: int):
+        """Добавить дополнительные проходы для лучшей проходимости"""
+        # Добавляем случайные проходы
+        extra_passages = (width * height) // 30  # Примерно 3% клеток
+
+        for _ in range(extra_passages):
+            x = random.randint(1, width - 2)
+            y = random.randint(1, height - 2)
+
+            # Проверяем, что это стена
+            if maze[y][x] == 1:
+                # Считаем соседние стены
+                wall_count = 0
+                passable_count = 0
+
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < width and 0 <= ny < height:
+                        if maze[ny][nx] == 1:
+                            wall_count += 1
+                        else:
+                            passable_count += 1
+
+                # Если стена окружена проходами, делаем проход
+                if passable_count >= 2 and wall_count <= 2:
+                    maze[y][x] = 0
+
+                    # С небольшим шансом делаем дополнительные проходы вокруг
+                    if random.random() < 0.2:
+                        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                            nx, ny = x + dx, y + dy
+                            if (0 <= nx < width and 0 <= ny < height and
+                                    maze[ny][nx] == 1 and random.random() < 0.5):
+                                maze[ny][nx] = 0
+
+    @staticmethod
+    def _connect_dead_ends(maze: List[List[int]], width: int, height: int):
+        """Соединить тупики для лучшей проходимости"""
+        dead_ends = []
+
+        for y in range(1, height - 1):
+            for x in range(1, width - 1):
+                if maze[y][x] == 0:
+                    # Считаем соседние проходы
+                    passable_neighbors = 0
+                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < width and 0 <= ny < height and maze[ny][nx] == 0:
+                            passable_neighbors += 1
+
+                    # Если это тупик (только 1 проход)
+                    if passable_neighbors == 1:
+                        dead_ends.append((x, y))
+
+        # Соединяем некоторые тупики
+        for x, y in dead_ends:
+            if random.random() < 0.3:  # 30% шанс соединения
+                # Ищем направление для нового прохода
+                directions = []
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < width and 0 <= ny < height and maze[ny][nx] == 1:
+                        # Проверяем, что за стеной есть проход
+                        nx2, ny2 = x + dx * 2, y + dy * 2
+                        if (0 <= nx2 < width and 0 <= ny2 < height and
+                                maze[ny2][nx2] == 0):
+                            directions.append((dx, dy))
+
+                if directions:
+                    dx, dy = random.choice(directions)
+                    maze[y + dy][x + dx] = 0
 
 
 class FearAnalyzer:
@@ -249,7 +433,6 @@ class FearAnalyzer:
         inactivity_level = behavior_data.calculate_inactivity()
         aggression_level = len(behavior_data.scream_events) / 10.0 if behavior_data.scream_events else 0.0
 
-        # Убрали вывод в консоль для чистоты
         if mouse_tremor > 0.3:
             self.fear_amplifiers['sounds'] = min(3.0, 1.0 + mouse_tremor * 2)
             self.fear_amplifiers['jump_scares'] = min(2.5, 1.0 + mouse_tremor * 1.5)
@@ -283,7 +466,7 @@ class FearAnalyzer:
 
 
 class Horror3DGame(arcade.View):
-    """3D хоррор-лабиринт с правильным лабиринтом и звуками"""
+    """3D хоррор-лабиринт с улучшенной атмосферой"""
 
     def __init__(self, fear_profile=None):
         super().__init__()
@@ -301,6 +484,15 @@ class Horror3DGame(arcade.View):
         self.step_counter = 0
         self.monster_near_counter = 0
         self.is_moving = False
+        self.music_playing = False
+        self.current_music = None
+        self.music_volume = 0.4  # Общая громкость музыки
+        self.sfx_volume = 1.0  # Громкость звуковых эффектов
+        self.jumpscare_volume = 1.5  # Увеличенная громкость для скримеров
+
+        # Таймеры для звуков
+        self.sudden_sound_timer = 0
+        self.sudden_sound_interval = random.uniform(20.0, 40.0)  # Резкие звуки реже
 
         # Инициализируем звуковую систему
         self.init_sound_manager()
@@ -314,11 +506,11 @@ class Horror3DGame(arcade.View):
         self.inactivity_start = 0
 
         # === НАСТРОЙКИ ИГРОКА ===
-        self.map_width = 31
-        self.map_height = 31
+        self.map_width = 31  # НЕЧЕТНОЕ ЧИСЛО для идеального лабиринта
+        self.map_height = 31  # НЕЧЕТНОЕ ЧИСЛО для идеального лабиринта
         self.tile_size = 64
 
-        # Генерация сложного лабиринта
+        # Генерация СОВЕРШЕННОГО лабиринта
         self.map = MazeGenerator.generate_perfect_maze(self.map_width, self.map_height)
         self.maze = self.map
 
@@ -329,6 +521,16 @@ class Horror3DGame(arcade.View):
         self.player_health = 100.0
         self.player_stress = 30.0
         self.player_fov = math.pi / 1.8
+
+        # === ВРЕМЯ ИГРЫ ===
+        self.game_time = 0.0
+        self.max_game_time = 600.0  # УВЕЛИЧЕНО ДО 15 МИНУТ (было 300)
+        self.time_warning_timer = 0.0
+        self.show_time_warning = False
+        self.time_since_last_scare = 0.0
+        self.time_in_darkness = 0.0
+        self.time_since_last_analysis = 0.0
+        self.start_time = time.time()
 
         # === КОЛЛИЗИИ ===
         self.collision_map = self._create_collision_map()
@@ -341,21 +543,41 @@ class Horror3DGame(arcade.View):
         self.minimap_cooldown = 0.3
         self.minimap_scale = 0.8
         self.show_instructions = False
+        self.show_i_hint = True  # Флаг для показа подсказки про клавишу I
+        self.i_hint_timer = 5.0  # 5 секунд показываем подсказку
 
         # === ОБЪЕКТЫ ===
         self.objectives: List[Objective] = []
         self.keys_collected = 0
-        self.keys_needed = 3
+        self.keys_needed = 3  # Возвращаем 3 ключа
         self.total_keys = 3
         self.exit_found = False
         self._place_objects()
 
-        # === ОСВЕЩЕНИЕ ===
+        # === ОСВЕЩЕНИЕ (новые эффекты) ===
         self.flashlight_on = True
-        self.flashlight_battery = 150.0
+        self.flashlight_battery = 200.0  # УВЕЛИЧЕНА БАТАРЕЙКА (было 150)
         self.flashlight_flicker = 0.0
         self.ambient_light = 1.0
         self.light_level = 1.0
+
+        # === НОВЫЕ ЭФФЕКТЫ ОСВЕЩЕНИЯ ===
+        self.darkness_timer = 0.0
+        self.darkness_stage = 0  # 0-нормально, 1-средняя темнота, 2-темно
+        self.darkness_target = 0.0
+        self.darkness_speed = 0.08  # Медленнее увеличение темноты
+
+        # Мерцание света
+        self.light_flicker_active = False
+        self.light_flicker_timer = 0.0
+        self.light_flicker_duration = random.uniform(2.0, 6.0)
+        self.light_flicker_intensity = 0.0
+
+        # Землетрясение
+        self.earthquake_active = False
+        self.earthquake_timer = 0.0
+        self.earthquake_duration = random.uniform(3.0, 8.0)
+        self.earthquake_intensity = 0.0
 
         # === ЭФФЕКТЫ ===
         self.screen_shake = 0.0
@@ -367,6 +589,13 @@ class Horror3DGame(arcade.View):
         self.flash_effect = 0.0
         self.walk_bob = 0.0
 
+        # === НОВЫЕ ЖУТКИЕ ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ===
+        self.hallucination_timer = 0.0
+        self.hallucination_active = False
+        self.shadow_figures = []  # Теневые фигуры для галлюцинаций
+        self.blood_veins = []  # Кровавые прожилки на экране
+        self.whisper_effects = []  # Эффекты шепотов
+
         # === ЧАСТИЦЫ ===
         self.particles: List[Particle] = []
         self.blood_particles: List[Particle] = []
@@ -374,6 +603,10 @@ class Horror3DGame(arcade.View):
         # === МОНСТРЫ ===
         self.monsters: List[Monster] = []
         self._init_monsters()
+
+        # === НОВЫЕ ЭФФЕКТЫ ПРИБЛИЖЕНИЯ К МОНСТРАМ ===
+        self.near_monster_effect = 0.0
+        self.monster_proximity_timer = 0.0
 
         # === УПРАВЛЕНИЕ ===
         self.keys_pressed = {
@@ -390,12 +623,9 @@ class Horror3DGame(arcade.View):
         self.mouse_sensitivity = 0.002
         self.turn_speed = 1.8
 
-        # === ВРЕМЯ ===
-        self.game_time = 0.0
-        self.time_since_last_scare = 0.0
-        self.time_in_darkness = 0.0
-        self.time_since_last_analysis = 0.0
-        self.start_time = time.time()
+        # Таймеры для случайных событий
+        self.random_event_timer = 0.0
+        self.next_event_time = random.uniform(30.0, 60.0)
 
         # === СОСТОЯНИЕ ===
         self.game_active = True
@@ -404,6 +634,7 @@ class Horror3DGame(arcade.View):
         self.tutorial_time = 6.0
         self.game_over = False
         self.victory = False
+        self.time_out = False  # Флаг окончания времени
 
         # === СТАТИСТИКА ===
         self.jump_scares_triggered = 0
@@ -414,8 +645,51 @@ class Horror3DGame(arcade.View):
         self.adaptive_sound_volume = 1.0
         self.fear_induced_darkness = 0.0
 
-        # Убрали лишний вывод в консоль
-        print("Запуск 3D лабиринта...")
+        # Инициализируем визуальные эффекты
+        self._init_visual_effects()
+
+        print("Запуск улучшенного 3D лабиринта...")
+        print(f"Размер лабиринта: {self.map_width}x{self.map_height}")
+        print(f"Время на прохождение: {self.max_game_time / 60:.1f} минут")
+
+    def _init_visual_effects(self):
+        """Инициализировать визуальные эффекты"""
+        # Создаем теневы фигуры для галлюцинаций
+        self.shadow_figures = []
+        for _ in range(3):
+            self.shadow_figures.append({
+                'x': random.uniform(0, self.window.width),
+                'y': random.uniform(0, self.window.height),
+                'life': 0,
+                'max_life': random.uniform(1.0, 3.0),
+                'size': random.uniform(30, 60),
+                'speed': random.uniform(10, 30)
+            })
+
+        # Создаем кровавые прожилки
+        self.blood_veins = []
+        for _ in range(10):
+            self.blood_veins.append({
+                'x1': random.uniform(0, self.window.width),
+                'y1': random.uniform(0, self.window.height),
+                'x2': random.uniform(0, self.window.width),
+                'y2': random.uniform(0, self.window.height),
+                'thickness': random.uniform(1, 3),
+                'alpha': 0,
+                'pulse': random.random() * math.pi * 2
+            })
+
+        # Создаем эффекты шепотов
+        self.whisper_effects = []
+        for _ in range(5):
+            self.whisper_effects.append({
+                'x': random.uniform(0, self.window.width),
+                'y': random.uniform(0, self.window.height),
+                'text': random.choice(["...", "смотри...", "иди...", "нельзя...", "там..."]),
+                'alpha': 0,
+                'life': 0,
+                'max_life': random.uniform(2.0, 4.0)
+            })
 
     # ==================== ЗВУКОВАЯ СИСТЕМА ====================
 
@@ -425,243 +699,378 @@ class Horror3DGame(arcade.View):
             from sound_manager import SoundManager
             self.sound_manager = SoundManager(sound_mode="level2")
             self.sound_manager.set_volume(1.0)
+            self.start_background_music()
         except Exception as e:
             print(f"Ошибка звуков: {e}")
             self.sound_manager = None
 
+    def start_background_music(self):
+        """Запустить фоновую музыку"""
+        if not self.sound_manager:
+            return
+
+        if not self.music_playing and self.sound_manager.sounds.get('music'):
+            try:
+                # Пытаемся выбрать случайную музыку из папки music
+                music_list = self.sound_manager.sounds.get('music', [])
+                if music_list:
+                    music_data = random.choice(music_list)
+                    self.current_music = music_data['sound']
+                    # Запускаем музыку с циклом
+                    self.current_music.play(volume=self.music_volume, loop=True)
+                    self.music_playing = True
+                    print("Фоновая музыка запущена")
+            except Exception as e:
+                print(f"Ошибка при запуске музыки: {e}")
+
+    def stop_background_music(self):
+        """Остановить фоновую музыку"""
+        if self.music_playing and self.current_music:
+            try:
+                self.current_music.stop()
+                self.music_playing = False
+                print("Фоновая музыка остановлена")
+            except:
+                pass
+
+    def play_jumpscare_3d(self):
+        """Скример - ОЧЕНЬ ГРОМКИЙ"""
+        if self.sound_manager:
+            try:
+                # Останавливаем музыку на время скримера
+                if self.music_playing and self.current_music:
+                    self.current_music.stop()
+                    self.music_playing = False
+
+                # Ищем звук в папке jumpscare
+                jumpscare_sounds = []
+                for category, sounds in self.sound_manager.sounds.items():
+                    for sound_data in sounds:
+                        if 'jumpscare' in sound_data.get('name', '').lower() or 'scare' in sound_data.get('name',
+                                                                                                          '').lower():
+                            jumpscare_sounds.append(sound_data)
+
+                # Если нет специальных звуков скримеров, используем обычные scream
+                if not jumpscare_sounds:
+                    jumpscare_sounds = self.sound_manager.sounds.get('scream', [])
+
+                if jumpscare_sounds:
+                    sound_data = random.choice(jumpscare_sounds)
+                    # ОЧЕНЬ ГРОМКИЙ звук
+                    sound_data['sound'].play(volume=self.jumpscare_volume * 1.5)
+
+                    # Добавляем резкие звуки с задержкой
+                    arcade.schedule(lambda dt: self.play_sudden_sound(volume=0.7), 0.2)
+                    arcade.schedule(lambda dt: self.play_sudden_sound(volume=0.5), 0.5)
+
+                    # Перезапускаем музыку через 2 секунды
+                    arcade.schedule(lambda dt: self.start_background_music(), 2.0)
+
+                    self.camera_shake = 1.0
+                    self.flash_effect = 1.0
+                    self.player_stress = min(100, self.player_stress + 40)  # Больше стресса
+                    self.player_sanity = max(0, self.player_sanity - 25)  # Больше потери рассудка
+                    self.jump_scares_triggered += 1
+            except Exception as e:
+                print(f"Ошибка при воспроизведении скримера: {e}")
+
+    def play_sudden_sound(self, volume=0.5):
+        """Воспроизвести резкий звук"""
+        if self.sound_manager:
+            try:
+                # Выбираем случайный резкий звук
+                sound_types = ['sudden', 'impact', 'glass', 'metal', 'break', 'clang']
+                for sound_type in sound_types:
+                    if self.sound_manager.sounds.get(sound_type):
+                        self.sound_manager.play_sound(sound_type, volume=volume * self.sfx_volume)
+                        break
+            except:
+                pass
+
     def update_sounds(self, delta_time):
-        """Обновление звуков"""
+        """Обновление звуков с новой логикой"""
         if not self.sound_manager:
             return
 
         current_time = time.time()
         self.sound_timer += delta_time
+        self.sudden_sound_timer += delta_time
 
         # 1. ЗВУКИ ШАГОВ
         if self.is_moving:
             if current_time - self.last_step_sound > self.step_interval:
                 volume = 0.3 + random.random() * 0.1
-                self.sound_manager.play_sound('footstep', volume=volume)
+                self.sound_manager.play_sound('footstep', volume=volume * self.sfx_volume)
                 self.last_step_sound = current_time
                 self.step_counter += 1
 
-        # 2. АТМОСФЕРНЫЕ звуки
+        # 2. АТМОСФЕРНЫЕ звуки - ТОЛЬКО ТИХИЕ
         if current_time - self.last_ambient_sound > self.ambient_interval:
-            sound_type = random.choice(['ambient', 'drip', 'wind', 'door'])
-            volume = 0.2 + random.random() * 0.1
-            self.sound_manager.play_sound(sound_type, volume=volume)
+            # Только тихие атмосферные звуки
+            sound_type = random.choice(['ambient', 'drip', 'wind'])
+            volume = 0.1 + random.random() * 0.1  # Очень тихо
+            self.sound_manager.play_sound(sound_type, volume=volume * self.sfx_volume)
             self.last_ambient_sound = current_time
-            self.ambient_interval = random.randint(5, 10)
+            self.ambient_interval = random.randint(10, 20)  # Реже
 
-        # 3. ШЕПОТЫ
-        if random.random() < 0.01:
-            volume = 0.15 + random.random() * 0.1
-            self.sound_manager.play_sound('whisper', volume=volume)
+        # 3. ШЕПОТЫ - ТОЛЬКО ТИХИЕ
+        if random.random() < 0.005:  # Реже
+            volume = 0.08 + random.random() * 0.05  # Очень тихо
+            self.sound_manager.play_sound('whisper', volume=volume * self.sfx_volume)
+
+            # Активируем эффект шепота
+            for effect in self.whisper_effects:
+                if effect['life'] <= 0:
+                    effect['x'] = random.uniform(0, self.window.width)
+                    effect['y'] = random.uniform(0, self.window.height)
+                    effect['text'] = random.choice(["...", "смотри...", "иди...", "нельзя...", "там...", "за тобой..."])
+                    effect['alpha'] = 255
+                    effect['life'] = effect['max_life']
+                    break
 
         # 4. СЕРДЦЕБИЕНИЕ
-        if self.player_stress > 60:
+        if self.player_stress > 60 or self.near_monster_effect > 0.5:
             self.heartbeat_timer += delta_time
-            heartbeat_interval = max(0.1, 1.0 - (self.player_stress - 60) / 100)
+            heartbeat_interval = max(0.1, 1.0 - max(self.player_stress - 60, self.near_monster_effect * 50) / 100)
 
             if self.heartbeat_timer > heartbeat_interval:
-                volume = 0.3 + (self.player_stress - 60) / 200
-                self.sound_manager.play_sound('heartbeat', volume=volume)
+                volume = 0.3 + max((self.player_stress - 60) / 200, self.near_monster_effect * 0.5)
+                self.sound_manager.play_sound('heartbeat', volume=volume * self.sfx_volume)
                 self.heartbeat_timer = 0
                 self.heartbeat_active = True
         else:
             self.heartbeat_active = False
 
-        # 5. ЗВУКИ МОНСТРОВ
+        # 5. ЗВУКИ МОНСТРОВ - ТОЛЬКО КОГДА БЛИЗКО
         self.monster_sound_timer += delta_time
-        if self.monster_sound_timer > 2.0:
+        if self.monster_sound_timer > 3.0:  # Реже
             for monster in self.monsters:
                 if monster.active:
                     dx = monster.x - self.player_x
                     dy = monster.y - self.player_y
                     distance = math.sqrt(dx * dx + dy * dy)
 
-                    if distance < 200:
-                        if random.random() < 0.3:
-                            volume = 0.4 * (1.0 - distance / 300)
-                            self.sound_manager.play_sound('monster', volume=volume)
+                    # Только если очень близко
+                    if distance < 100:
+                        if random.random() < 0.4:
+                            volume = 0.6 * (1.0 - distance / 200)
+                            self.sound_manager.play_sound('monster', volume=volume * self.sfx_volume)
                             self.monster_near_counter += 1
 
             self.monster_sound_timer = 0
 
-        # 6. ВНЕЗАПНЫЕ звуки
-        if (self.light_level < 0.3 or self.player_sanity < 50) and random.random() < 0.005:
-            volume = 0.4 + random.random() * 0.2
-            self.sound_manager.play_sound('sudden', volume=volume)
-            self.camera_shake = 0.3
-            self.player_stress = min(100, self.player_stress + 10)
+        # 6. ВНЕЗАПНЫЕ звуки - ТОЛЬКО В КЛЮЧЕВЫЕ МОМЕНТЫ
+        if self.sudden_sound_timer > self.sudden_sound_interval:
+            # Проверяем условия для резкого звука
+            should_play = False
 
-    def play_jumpscare_3d(self):
-        """Скример"""
-        if self.sound_manager:
-            volume = 0.8 + random.random() * 0.2
-            self.sound_manager.play_sound('scream', volume=volume)
+            # Условия для резкого звука:
+            if self.light_level < 0.3 and random.random() < 0.7:
+                should_play = True
+            elif self.player_sanity < 40 and random.random() < 0.6:
+                should_play = True
+            elif self.earthquake_active and random.random() < 0.8:
+                should_play = True
+            elif self.light_flicker_active and random.random() < 0.5:
+                should_play = True
+            elif self.near_monster_effect > 0.7 and random.random() < 0.9:
+                should_play = True
 
-            arcade.schedule(lambda dt: self.sound_manager.play_sound('sudden', volume=0.4), 0.2)
-            arcade.schedule(lambda dt: self.sound_manager.play_sound('monster', volume=0.3), 0.5)
+            if should_play:
+                volume = 0.6 + random.random() * 0.3
+                self.play_sudden_sound(volume=volume)
+                self.camera_shake = 0.4
+                self.player_stress = min(100, self.player_stress + 15)
 
-            self.camera_shake = 1.0
-            self.flash_effect = 1.0
-            self.player_stress = min(100, self.player_stress + 30)
-            self.player_sanity = max(0, self.player_sanity - 20)
-            self.jump_scares_triggered += 1
+                # Сбрасываем таймер
+                self.sudden_sound_timer = 0
+                self.sudden_sound_interval = random.uniform(15.0, 30.0)
 
-    # ==================== ГЕНЕРАЦИЯ КАРТЫ ====================
+    # ==================== НОВЫЕ ЖУТКИЕ ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ====================
 
-    def _find_start_position(self) -> Tuple[float, float]:
-        """Найти открытую позицию для старта"""
-        open_areas = []
+    def update_hallucinations(self, delta_time):
+        """Обновление галлюцинаций"""
+        self.hallucination_timer += delta_time
 
-        for y in range(self.map_height):
-            for x in range(self.map_width):
-                if self.map[y][x] == 0:
-                    space = 0
-                    for dy in range(-2, 3):
-                        for dx in range(-2, 3):
-                            nx, ny = x + dx, y + dy
-                            if (0 <= nx < self.map_width and 0 <= ny < self.map_height and
-                                    self.map[ny][nx] == 0):
-                                space += 1
+        # Галлюцинации при низком рассудке
+        if self.player_sanity < 50 and random.random() < 0.01:
+            self.hallucination_active = True
 
-                    if space >= 20:
-                        open_areas.append((x, y, space))
+        if self.hallucination_active:
+            # Активируем теневые фигуры
+            for figure in self.shadow_figures:
+                if figure['life'] <= 0 and random.random() < 0.1:
+                    figure['life'] = figure['max_life']
+                    figure['x'] = random.uniform(0, self.window.width)
+                    figure['y'] = random.uniform(0, self.window.height)
 
-        if open_areas:
-            open_areas.sort(key=lambda a: a[2], reverse=True)
-            return open_areas[0][0] + 0.5, open_areas[0][1] + 0.5
+            # Обновляем жизнь фигур
+            for figure in self.shadow_figures:
+                if figure['life'] > 0:
+                    figure['life'] -= delta_time
+                    # Двигаем фигуры
+                    figure['x'] += random.uniform(-1, 1) * figure['speed'] * delta_time
+                    figure['y'] += random.uniform(-1, 1) * figure['speed'] * delta_time
 
-        return self.map_width // 2 + 0.5, self.map_height // 2 + 0.5
+        # Кровавые прожилки при стрессе
+        if self.player_stress > 70:
+            for vein in self.blood_veins:
+                vein['pulse'] += delta_time * 2
+                vein['alpha'] = int((math.sin(vein['pulse']) + 1) / 2 * 100 * (self.player_stress - 70) / 30)
 
-    def _find_far_position(self, from_x: float, from_y: float) -> Tuple[int, int]:
-        """Найти позицию далеко от заданной"""
-        max_distance = 0
-        far_pos = (self.map_width - 2, self.map_height - 2)
+        # Эффекты шепотов
+        for effect in self.whisper_effects:
+            if effect['life'] > 0:
+                effect['life'] -= delta_time
+                effect['alpha'] = int((effect['life'] / effect['max_life']) * 255)
+                # Двигаем текст
+                effect['x'] += random.uniform(-10, 10) * delta_time
+                effect['y'] += random.uniform(-10, 10) * delta_time
 
-        for y in range(self.map_height):
-            for x in range(self.map_width):
-                if self.map[y][x] == 0:
-                    distance = math.sqrt((x - from_x) ** 2 + (y - from_y) ** 2)
-                    if distance > max_distance:
-                        max_distance = distance
-                        far_pos = (x, y)
+    def update_darkness(self, delta_time):
+        """Постепенное увеличение темноты"""
+        self.darkness_timer += delta_time
 
-        return far_pos
+        # Каждые 90 секунд увеличиваем темноту
+        if self.darkness_timer > 90.0:
+            self.darkness_timer = 0
+            self.darkness_stage = min(2, self.darkness_stage + 1)
 
-    def _create_collision_map(self):
-        """Создать карту коллизий"""
-        return [[cell == 1 for cell in row] for row in self.map]
+            # Новый уровень темноты
+            if self.darkness_stage == 1:
+                self.darkness_target = 0.3
+                print("Темнота начинает сгущаться...")
+                # Резкий звук при изменении темноты
+                if self.sound_manager:
+                    self.play_sudden_sound(volume=0.4)
+            elif self.darkness_stage == 2:
+                self.darkness_target = 0.6
+                print("Становится еще темнее...")
+                # Громкий звук при сильной темноте
+                if self.sound_manager:
+                    self.play_sudden_sound(volume=0.6)
 
-    def _create_walls_list(self):
-        """Создать список стен"""
-        walls = []
-        for y in range(self.map_height):
-            for x in range(self.map_width):
-                if self.map[y][x] == 1:
-                    walls.append({
-                        'x': x * self.tile_size,
-                        'y': y * self.tile_size,
-                        'width': self.tile_size,
-                        'height': self.tile_size
-                    })
-        return walls
+        # Плавное изменение темноты
+        if self.fear_induced_darkness < self.darkness_target:
+            self.fear_induced_darkness = min(self.darkness_target,
+                                             self.fear_induced_darkness + delta_time * self.darkness_speed)
+        elif self.fear_induced_darkness > self.darkness_target:
+            self.fear_induced_darkness = max(self.darkness_target,
+                                             self.fear_induced_darkness - delta_time * self.darkness_speed)
 
-    def check_collision(self, x, y):
-        """Проверить коллизию"""
-        ix, iy = int(x), int(y)
+    def update_light_flicker(self, delta_time):
+        """Обновление мерцания света"""
+        if not self.light_flicker_active:
+            # Случайный шанс начать мерцание
+            if random.random() < 0.001 * (self.player_stress / 100):
+                self.light_flicker_active = True
+                self.light_flicker_timer = 0
+                self.light_flicker_duration = random.uniform(2.0, 6.0)
+                self.light_flicker_intensity = random.uniform(0.3, 0.8)
+                print("Свет начал мерцать!")
+                # Громкий звук при мерцании
+                if self.sound_manager:
+                    self.play_sudden_sound(volume=0.5)
+        else:
+            self.light_flicker_timer += delta_time
+            if self.light_flicker_timer > self.light_flicker_duration:
+                self.light_flicker_active = False
+                self.light_flicker_intensity = 0.0
 
-        if 0 <= ix < self.map_width and 0 <= iy < self.map_height:
-            return self.collision_map[iy][ix]
+    def update_earthquake(self, delta_time):
+        """Обновление землетрясения"""
+        if not self.earthquake_active:
+            # Случайный шанс начать землетрясение
+            if random.random() < 0.0005 * (self.player_stress / 100):
+                self.earthquake_active = True
+                self.earthquake_timer = 0
+                self.earthquake_duration = random.uniform(3.0, 8.0)
+                self.earthquake_intensity = random.uniform(0.5, 1.0)
+                print("Землетрясение!")
+                # ОЧЕНЬ ГРОМКИЕ звуки при землетрясении
+                if self.sound_manager:
+                    self.play_jumpscare_3d()  # Полноценный скример
+        else:
+            self.earthquake_timer += delta_time
+            if self.earthquake_timer > self.earthquake_duration:
+                self.earthquake_active = False
+                self.earthquake_intensity = 0.0
+            else:
+                # Интенсивность уменьшается со временем
+                self.earthquake_intensity = max(0, self.earthquake_intensity - delta_time * 0.1)
 
-        return True
+    def update_random_events(self, delta_time):
+        """Обновление случайных событий"""
+        self.random_event_timer += delta_time
 
-    # ==================== РАЗМЕЩЕНИЕ ОБЪЕКТОВ ====================
+        if self.random_event_timer > self.next_event_time:
+            self.random_event_timer = 0
+            self.next_event_time = random.uniform(30.0, 90.0)
 
-    def _place_objects(self):
-        """Разместить объекты на карте"""
-        self.objectives.clear()
+            # Случайное событие
+            event = random.choice(['light_flicker', 'whisper', 'camera_shake', 'paranoia_boost', 'hallucination'])
 
-        free_cells = []
-        for y in range(self.map_height):
-            for x in range(self.map_width):
-                if self.map[y][x] == 0:
-                    dist_to_player = math.sqrt((x - self.player_x) ** 2 + (y - self.player_y) ** 2)
-                    if dist_to_player > 3:
-                        free_cells.append((x, y))
+            if event == 'light_flicker' and not self.light_flicker_active:
+                self.light_flicker_active = True
+                self.light_flicker_timer = 0
+                self.light_flicker_duration = random.uniform(3.0, 7.0)
+                self.light_flicker_intensity = random.uniform(0.4, 0.9)
+                # Звук при мерцании
+                if self.sound_manager:
+                    self.play_sudden_sound(volume=0.4)
 
-        if not free_cells:
-            return
+            elif event == 'whisper':
+                if self.sound_manager:
+                    whispers = ["Они смотрят...", "Ты не уйдешь...", "Здесь...", "Прямо за тобой..."]
+                    whisper = random.choice(whispers)
+                    self.sound_manager.play_sound('whisper', volume=0.2)  # Тихо
+                    self.player_sanity = max(0, self.player_sanity - 5)
 
-        for _ in range(3):
-            if not free_cells:
-                break
+            elif event == 'camera_shake':
+                self.camera_shake = random.uniform(0.3, 0.7)
+                # Резкий звук при тряске
+                if self.sound_manager:
+                    self.play_sudden_sound(volume=0.3)
 
-            x, y = random.choice(free_cells)
-            free_cells.remove((x, y))
+            elif event == 'paranoia_boost':
+                self.paranoia_effect = min(0.8, self.paranoia_effect + 0.3)
 
-            self.objectives.append(Objective(
-                x=x + 0.5,
-                y=y + 0.5,
-                type='key',
-                collected=False,
-                pulse=random.random() * math.pi * 2
-            ))
+            elif event == 'hallucination':
+                self.hallucination_active = True
+                print("Начинаются галлюцинации...")
 
-        exit_x, exit_y = self.exit_location
-        self.objectives.append(Objective(
-            x=exit_x + 0.5,
-            y=exit_y + 0.5,
-            type='exit',
-            collected=False,
-            pulse=0.0
-        ))
+    def update_monster_proximity_effect(self, delta_time):
+        """Эффект при приближении к монстрам"""
+        nearest_distance = float('inf')
+        for monster in self.monsters:
+            if monster.active:
+                dx = monster.x - self.player_x
+                dy = monster.y - self.player_y
+                distance = math.sqrt(dx * dx + dy * dy)
+                nearest_distance = min(nearest_distance, distance)
 
-        self.keys = []
-        for i, obj in enumerate([obj for obj in self.objectives if obj.type == 'key']):
-            self.keys.append({
-                'x': obj.x * self.tile_size,
-                'y': obj.y * self.tile_size,
-                'collected': False,
-                'id': i
-            })
+        # Обновление эффекта
+        if nearest_distance < 10:
+            proximity = 1.0 - (nearest_distance / 10.0)
+            self.near_monster_effect = proximity * 1.5
+            self.monster_proximity_timer += delta_time
 
-    def _init_monsters(self):
-        """Инициализировать монстров"""
-        dead_ends = []
-        for y in range(1, self.map_height - 1):
-            for x in range(1, self.map_width - 1):
-                if self.map[y][x] == 0:
-                    walls = 0
-                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                        if self.map[y + dy][x + dx] == 1:
-                            walls += 1
-                    if walls >= 3:
-                        dead_ends.append((x, y))
+            # Моргание при близости
+            if self.monster_proximity_timer > 0.3:
+                self.light_flicker_intensity = max(self.light_flicker_intensity, proximity * 0.5)
+                self.monster_proximity_timer = 0
 
-        for i in range(min(3, len(dead_ends))):
-            x, y = dead_ends[i]
+            # Увеличение стресса
+            if proximity > 0.7:
+                self.player_stress = min(100, self.player_stress + delta_time * 10)
 
-            patrol_path = []
-            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                nx, ny = x + dx, y + dy
-                if (0 <= nx < self.map_width and 0 <= ny < self.map_height and
-                        self.map[ny][nx] == 0):
-                    patrol_path.append((nx + 0.5, ny + 0.5))
-
-            if not patrol_path:
-                patrol_path = [(x + 0.5, y + 0.5)]
-
-            monster = Monster(
-                x=x + 0.5,
-                y=y + 0.5,
-                speed=0.004 * self.fear_amplifiers['monsters'],
-                detection_range=2.5,
-                patrol_path=patrol_path
-            )
-            self.monsters.append(monster)
+                # Громкие звуки при очень близком монстре
+                if proximity > 0.9 and random.random() < 0.05:
+                    if self.sound_manager:
+                        volume = 0.8 * (1.0 + proximity)
+                        self.sound_manager.play_sound('monster', volume=volume)
+        else:
+            self.near_monster_effect = max(0, self.near_monster_effect - delta_time * 2)
 
     # ==================== ОСНОВНАЯ ЛОГИКА ====================
 
@@ -671,9 +1080,31 @@ class Horror3DGame(arcade.View):
             return
 
         self.game_time += delta_time
+
+        # ПРОВЕРКА ВРЕМЕНИ
+        self.time_warning_timer += delta_time
+        if self.game_time > self.max_game_time:
+            self.time_out = True
+            self._end_game("ВРЕМЯ ВЫШЛО")
+            return
+
+        # Предупреждение за 60 секунд до конца
+        if self.game_time > self.max_game_time - 60 and self.time_warning_timer > 10:
+            self.show_time_warning = True
+            self.time_warning_timer = 0
+            # Звуковое предупреждение
+            if self.sound_manager:
+                self.sound_manager.play_sound('sudden', volume=0.4)
+
         self.tutorial_time = max(0, self.tutorial_time - delta_time)
         self.last_minimap_toggle = max(0, self.last_minimap_toggle - delta_time)
         self.time_since_last_analysis += delta_time
+
+        # Обновление подсказки про клавишу I
+        if self.show_i_hint:
+            self.i_hint_timer -= delta_time
+            if self.i_hint_timer <= 0:
+                self.show_i_hint = False
 
         # Обновление активности игрока
         self._update_activity_tracking(delta_time)
@@ -701,6 +1132,14 @@ class Horror3DGame(arcade.View):
 
         # Обновление фонарика
         self._update_flashlight(delta_time)
+
+        # Новые эффекты
+        self.update_hallucinations(delta_time)
+        self.update_darkness(delta_time)
+        self.update_light_flicker(delta_time)
+        self.update_earthquake(delta_time)
+        self.update_random_events(delta_time)
+        self.update_monster_proximity_effect(delta_time)
 
         # Обновление монстров
         self._update_monsters(delta_time)
@@ -754,8 +1193,8 @@ class Horror3DGame(arcade.View):
         self.fear_induced_darkness = (self.fear_amplifiers['darkness'] - 1.0) * 0.3
 
         if self.sound_manager:
-            self.adaptive_sound_volume = self.fear_amplifiers['sounds']
-            self.sound_manager.set_volume(self.adaptive_sound_volume)  # ИСПРАВЛЕНО
+            self.sfx_volume = self.fear_amplifiers['sounds']
+            self.sound_manager.set_volume(self.sfx_volume)
 
         self.paranoia_effect = min(0.7, (self.fear_amplifiers['paranoia'] - 1.0) * 0.35)
 
@@ -763,7 +1202,19 @@ class Horror3DGame(arcade.View):
         """Обновить игрока"""
         move_forward = 0
         move_right = 0
-        move_speed = 2.8 * delta_time
+
+        # Замедление при низком рассудке
+        speed_multiplier = 1.0
+        if self.player_sanity < 40:
+            speed_multiplier = 0.7
+        elif self.player_sanity < 20:
+            speed_multiplier = 0.5
+
+        # Замедление при землетрясении
+        if self.earthquake_active:
+            speed_multiplier *= 0.6
+
+        move_speed = 3.0 * delta_time * speed_multiplier  # УВЕЛИЧЕНА СКОРОСТЬ (было 2.8)
 
         if self.keys_pressed[arcade.key.W]:
             move_forward += move_speed
@@ -788,10 +1239,10 @@ class Horror3DGame(arcade.View):
 
         turn_amount = 0
         if self.keys_pressed[arcade.key.LEFT] or self.keys_pressed[arcade.key.Q]:
-            turn_amount -= self.turn_speed * delta_time
+            turn_amount -= self.turn_speed * delta_time * speed_multiplier
             self.behavior_data.key_presses.append((time.time(), 'LEFT'))
         if self.keys_pressed[arcade.key.RIGHT] or self.keys_pressed[arcade.key.E]:
-            turn_amount += self.turn_speed * delta_time
+            turn_amount += self.turn_speed * delta_time * speed_multiplier
             self.behavior_data.key_presses.append((time.time(), 'RIGHT'))
 
         if turn_amount != 0:
@@ -821,7 +1272,7 @@ class Horror3DGame(arcade.View):
 
     def _apply_movement(self, move_x: float, move_y: float):
         """Применить движение"""
-        speed_factor = 0.8
+        speed_factor = 0.9  # УВЕЛИЧЕНА ПРОХОДИМОСТЬ (было 0.8)
         new_x = self.player_x + move_x * speed_factor
         new_y = self.player_y + move_y * speed_factor
 
@@ -850,7 +1301,13 @@ class Horror3DGame(arcade.View):
     def _update_flashlight(self, delta_time: float):
         """Обновить фонарик"""
         if self.flashlight_on and self.flashlight_battery > 0:
-            drain_rate = 0.6 * (1.0 + self.fear_amplifiers['darkness'] * 0.3)
+            # Увеличенный расход при мерцании
+            drain_multiplier = 1.0
+            if self.light_flicker_active:
+                drain_multiplier = 1.5
+
+            drain_rate = 0.5 * (
+                        1.0 + self.fear_amplifiers['darkness'] * 0.3) * drain_multiplier  # МЕНЬШЕ РАСХОД (было 0.6)
             self.flashlight_battery = max(0, self.flashlight_battery - delta_time * drain_rate)
 
             if self.flashlight_battery < 30:
@@ -861,25 +1318,34 @@ class Horror3DGame(arcade.View):
             if self.flashlight_battery <= 0:
                 self.flashlight_on = False
                 self.player_stress = min(100, self.player_stress + 25)
+                # Громкий звук при отключении фонарика
                 if self.sound_manager:
-                    self.sound_manager.play_sound('power_down', volume=0.5)
+                    self.play_sudden_sound(volume=0.6)
         else:
-            if self.flashlight_battery < 150:
-                self.flashlight_battery = min(150, self.flashlight_battery + delta_time * 0.1)
+            if self.flashlight_battery < 200:  # Соответственно увеличенному максимуму
+                self.flashlight_battery = min(200, self.flashlight_battery + delta_time * 0.15)  # БЫСТРЕЕ ЗАРЯДКА
 
+        # Учет мерцания
         if self.flashlight_on and self.flashlight_battery > 20:
-            self.light_level = self.flashlight_flicker
+            base_level = self.flashlight_flicker
+            if self.light_flicker_active:
+                flicker = (math.sin(self.game_time * 30) + 1) / 2
+                flicker = flicker * 0.5 + 0.5  # От 0.5 до 1.0
+                base_level *= flicker
+            self.light_level = base_level
         else:
-            self.light_level = 0.3
+            self.light_level = max(0.1, 0.3 - self.fear_induced_darkness)
 
     def _update_monsters(self, delta_time: float):
-        """Обновить монстров"""
+        """Обновить монстров с улучшенным ИИ"""
         for monster in self.monsters:
             if not monster.active:
                 continue
 
             monster.attack_cooldown = max(0, monster.attack_cooldown - delta_time)
             monster.last_seen_time += delta_time
+            monster.move_timer += delta_time
+            monster.idle_timer += delta_time
 
             dx = self.player_x - monster.x
             dy = self.player_y - monster.y
@@ -906,25 +1372,86 @@ class Horror3DGame(arcade.View):
                     if distance < 1.5 and monster.attack_cooldown <= 0:
                         self._monster_attack(monster)
 
-                if monster.last_seen_time > 5.0:
+                if monster.last_seen_time > 8.0:  # УВЕЛИЧЕНО ВРЕМЯ ПРЕСЛЕДОВАНИЯ (было 5.0)
                     monster.is_hunting = False
+                    monster.next_wander_target = None
             else:
-                if monster.patrol_path:
-                    target_x, target_y = monster.patrol_path[monster.patrol_index]
-                    pdx = target_x - monster.x
-                    pdy = target_y - monster.y
-                    pdist = math.sqrt(pdx * pdx + pdy * pdy)
+                # ЦИКЛ: БЛУЖДАНИЕ -> ОЖИДАНИЕ -> БЛУЖДАНИЕ
+                if monster.is_idle:
+                    monster.idle_timer += delta_time
+                    if monster.idle_timer > monster.idle_duration:
+                        monster.is_idle = False
+                        monster.idle_timer = 0
+                        monster.move_timer = 0
+                        monster.idle_duration = random.uniform(2.0, 5.0)
 
-                    if pdist > 0.1:
-                        move_x = (pdx / pdist) * monster.speed * 0.5 * delta_time * 60
-                        move_y = (pdy / pdist) * monster.speed * 0.5 * delta_time * 60
+                        # Выбираем новую цель для блуждания
+                        self._set_monster_wander_target(monster)
+                else:
+                    monster.move_timer += delta_time
 
-                        if not self.check_collision(monster.x + move_x, monster.y):
-                            monster.x += move_x
-                        if not self.check_collision(monster.x, monster.y + move_y):
-                            monster.y += move_y
+                    if monster.next_wander_target:
+                        target_x, target_y = monster.next_wander_target
+                        pdx = target_x - monster.x
+                        pdy = target_y - monster.y
+                        pdist = math.sqrt(pdx * pdx + pdy * pdy)
+
+                        if pdist > 0.1:
+                            move_x = (pdx / pdist) * monster.speed * 0.7 * delta_time * 60  # БЫСТРЕЕ БЛУЖДАНИЕ
+                            move_y = (pdy / pdist) * monster.speed * 0.7 * delta_time * 60
+
+                            if not self.check_collision(monster.x + move_x, monster.y):
+                                monster.x += move_x
+                            if not self.check_collision(monster.x, monster.y + move_y):
+                                monster.y += move_y
+                        else:
+                            # Достигли цели - переходим в режим ожидания
+                            monster.is_idle = True
+                            monster.idle_timer = 0
                     else:
-                        monster.patrol_index = (monster.patrol_index + 1) % len(monster.patrol_path)
+                        # Если нет цели, выбираем новую
+                        self._set_monster_wander_target(monster)
+
+                # Случайные быстрые перемещения
+                if monster.move_timer > monster.move_delay:
+                    monster.move_timer = 0
+                    monster.move_delay = random.uniform(2.0, 6.0)  # БОЛЬШЕ ЧАСТОТА
+
+                    # 30% шанс на быстрое перемещение
+                    if random.random() < 0.3:
+                        angle = random.random() * math.pi * 2
+                        move_dist = random.uniform(1.0, 3.0)  # БОЛЬШЕ ДИСТАНЦИЯ
+                        new_x = monster.x + math.cos(angle) * move_dist
+                        new_y = monster.y + math.sin(angle) * move_dist
+
+                        # Проверяем, можно ли переместиться
+                        if not self.check_collision(new_x, new_y):
+                            monster.x = new_x
+                            monster.y = new_y
+                            # После быстрого перемещения - ожидание
+                            monster.is_idle = True
+                            monster.idle_timer = 0
+
+    def _set_monster_wander_target(self, monster: Monster):
+        """Установить цель для блуждания монстра"""
+        # Ищем случайную точку в пределах радиуса блуждания
+        for _ in range(10):  # 10 попыток найти валидную позицию
+            angle = random.random() * math.pi * 2
+            distance = random.uniform(3.0, monster.wander_range)
+            target_x = monster.spawn_x + math.cos(angle) * distance
+            target_y = monster.spawn_y + math.sin(angle) * distance
+
+            # Проверяем, что позиция доступна
+            if not self.check_collision(target_x, target_y):
+                # Проверяем путь к цели
+                if self._check_line_of_sight(monster.x, monster.y, target_x, target_y, steps=10):
+                    monster.next_wander_target = (target_x, target_y)
+                    return
+
+        # Если не нашли хорошую цель, выбираем случайную из патрульного пути
+        if monster.patrol_path:
+            monster.patrol_index = (monster.patrol_index + 1) % len(monster.patrol_path)
+            monster.next_wander_target = monster.patrol_path[monster.patrol_index]
 
     def _check_line_of_sight(self, x1: float, y1: float, x2: float, y2: float, steps: int = 20) -> bool:
         """Проверить прямую видимость"""
@@ -961,7 +1488,7 @@ class Horror3DGame(arcade.View):
                 size=random.uniform(4, 8)
             ))
 
-        self.play_jumpscare_3d()
+        self.play_jumpscare_3d()  # ГРОМКИЙ скример при атаке
 
     def _update_objects(self, delta_time: float):
         """Обновить анимацию объектов"""
@@ -1038,7 +1565,7 @@ class Horror3DGame(arcade.View):
 
         if self.sound_manager and random.random() < 0.7:
             whisper = random.choice(whispers)
-            self.sound_manager.play_sound('whisper', volume=0.3 * self.fear_amplifiers['sounds'])
+            self.sound_manager.play_sound('whisper', volume=0.2 * self.fear_amplifiers['sounds'])  # Тихо
 
             self.visual_distortion = 0.3
             self.player_sanity = max(0, self.player_sanity - 5)
@@ -1055,7 +1582,7 @@ class Horror3DGame(arcade.View):
             dy = obj.y - self.player_y
             distance = math.sqrt(dx * dx + dy * dy)
 
-            if distance < 1.0:
+            if distance < 1.2:  # УВЕЛИЧЕН РАДИУС СБОРА (было 1.0)
                 obj.collected = True
 
                 if obj.type == 'key':
@@ -1113,6 +1640,11 @@ class Horror3DGame(arcade.View):
             shake_x = random.uniform(-self.screen_shake, self.screen_shake) * 25
             shake_y = random.uniform(-self.screen_shake, self.screen_shake) * 25
 
+        # Дополнительная тряска от землетрясения
+        if self.earthquake_active:
+            shake_x += math.sin(self.game_time * 20) * self.earthquake_intensity * 15
+            shake_y += math.cos(self.game_time * 18) * self.earthquake_intensity * 15
+
         # Искажение
         distortion_x = 0
         distortion_y = 0
@@ -1120,16 +1652,21 @@ class Horror3DGame(arcade.View):
             distortion_x = math.sin(self.game_time * 20) * self.visual_distortion * 5
             distortion_y = math.cos(self.game_time * 18) * self.visual_distortion * 5
 
-        total_offset_x = shake_x + distortion_x
-        total_offset_y = shake_y + distortion_y
+        total_offset_x = shake_x + distortion_x + self.camera_shake * random.uniform(-10, 10)
+        total_offset_y = shake_y + distortion_y + self.camera_shake * random.uniform(-10, 10)
 
-        # 3D вид
+        # 3D вид с учетом всех эффектов
         self._draw_3d_view(total_offset_x, total_offset_y)
 
         # Эффекты
         self._draw_effects(total_offset_x, total_offset_y)
 
-        # Интерфейс (без лишней надписи на карте)
+        # Новые жуткие визуальные эффекты
+        self._draw_hallucinations(total_offset_x, total_offset_y)
+        self._draw_blood_veins(total_offset_x, total_offset_y)
+        self._draw_whisper_effects(total_offset_x, total_offset_y)
+
+        # Интерфейс
         self._draw_hud()
 
         # Миникарта
@@ -1140,7 +1677,11 @@ class Horror3DGame(arcade.View):
         if self.show_tutorial and self.tutorial_time > 0:
             self._draw_tutorial()
 
-        # Инструкция (исправленная)
+        # Подсказка про клавишу I
+        if self.show_i_hint and not self.show_tutorial:
+            self._draw_i_hint()
+
+        # Инструкция
         if self.show_instructions:
             self._draw_instructions()
 
@@ -1148,18 +1689,24 @@ class Horror3DGame(arcade.View):
         if self.paranoia_effect > 0 and random.random() < self.paranoia_effect * 0.1:
             self._draw_paranoia_effect()
 
+        # Предупреждение о времени
+        if self.show_time_warning:
+            self._draw_time_warning()
+
     def _draw_3d_view(self, offset_x=0, offset_y=0):
-        """Нарисовать 3D вид"""
-        darkness_factor = 1.0 + self.fear_induced_darkness
+        """Нарисовать 3D вид с новыми эффектами"""
+        # Общая темнота
+        total_darkness = 1.0 + self.fear_induced_darkness + self.near_monster_effect * 0.5
+
         if self.flashlight_on and self.flashlight_battery > 20:
             base_color = (20, 15, 30)
         else:
             base_color = (5, 2, 10)
 
         bg_color = (
-            int(base_color[0] / darkness_factor),
-            int(base_color[1] / darkness_factor),
-            int(base_color[2] / darkness_factor)
+            int(base_color[0] / total_darkness),
+            int(base_color[1] / total_darkness),
+            int(base_color[2] / total_darkness)
         )
 
         arcade.draw_lrbt_rectangle_filled(
@@ -1176,17 +1723,24 @@ class Horror3DGame(arcade.View):
             self._draw_flashlight_effect(offset_x, offset_y)
 
     def _draw_walls_raycasting(self, offset_x=0, offset_y=0):
-        """Отрисовка стен"""
+        """Отрисовка стен с эффектами"""
         num_rays = 120
         ray_step = self.player_fov / num_rays
         column_width = self.window.width / num_rays
+
+        # Эффект мерцания для всех стен
+        flicker_multiplier = 1.0
+        if self.light_flicker_active:
+            flicker = (math.sin(self.game_time * 40) + 1) / 2
+            flicker = flicker * self.light_flicker_intensity + (1 - self.light_flicker_intensity)
+            flicker_multiplier = flicker
 
         for i in range(num_rays):
             ray_angle = (self.player_angle - self.player_fov / 2) + i * ray_step
             distance, wall_type = self._cast_ray(ray_angle)
 
             if distance > 0:
-                darkness = 1.0 + self.fear_induced_darkness
+                darkness = 1.0 + self.fear_induced_darkness + self.near_monster_effect * 0.3
                 if not self.flashlight_on or self.flashlight_battery < 20:
                     darkness *= 1.5
 
@@ -1196,7 +1750,7 @@ class Horror3DGame(arcade.View):
                 y_bottom = (self.window.height - wall_height) / 2 + offset_y
                 y_top = y_bottom + wall_height
 
-                darken = min(1.0, 8.0 / (distance * darkness))
+                darken = min(1.0, 8.0 / (distance * darkness)) * flicker_multiplier
 
                 if wall_type == 'side':
                     wall_color = (
@@ -1337,6 +1891,10 @@ class Horror3DGame(arcade.View):
             if not self.flashlight_on or self.flashlight_battery < 20:
                 darken *= 0.4
 
+            # Эффект мерцания
+            if self.light_flicker_active:
+                darken *= (math.sin(self.game_time * 30) + 1) / 2
+
             if obj_data['type'] == 'key':
                 pulse = (math.sin(obj_data['pulse'] * 2) + 1.5) / 2.5
                 brightness = pulse * darken * self.flashlight_flicker
@@ -1393,7 +1951,7 @@ class Horror3DGame(arcade.View):
                     )
 
     def _draw_monsters_3d(self, offset_x=0, offset_y=0):
-        """Отрисовка монстров"""
+        """Отрисовка монстров с эффектами"""
         for monster in self.monsters:
             if not monster.active or not monster.visible:
                 continue
@@ -1422,6 +1980,11 @@ class Horror3DGame(arcade.View):
 
                 if not self.flashlight_on or self.flashlight_battery < 20:
                     darken *= 0.3
+
+                # Эффект мерцания при приближении
+                if distance < 5 and self.near_monster_effect > 0.5:
+                    flicker = (math.sin(self.game_time * 40) + 1) / 2
+                    darken *= (0.5 + flicker * 0.5)
 
                 if self.paranoia_effect > 0 and random.random() < self.paranoia_effect:
                     size *= 1.2
@@ -1474,14 +2037,20 @@ class Horror3DGame(arcade.View):
                 )
 
     def _draw_flashlight_effect(self, offset_x=0, offset_y=0):
-        """Эффект фонарика"""
+        """Эффект фонарика с мерцанием"""
         if self.flashlight_battery <= 0:
             return
 
         center_x = self.window.width // 2 + offset_x
         center_y = self.window.height // 2 + offset_y
 
-        intensity = min(1.0, self.flashlight_battery / 150.0) * self.flashlight_flicker
+        # Базовая интенсивность
+        intensity = min(1.0, self.flashlight_battery / 200.0) * self.flashlight_flicker
+
+        # Эффект мерцания
+        if self.light_flicker_active:
+            flicker = (math.sin(self.game_time * 30) + 1) / 2
+            intensity *= (0.5 + flicker * 0.5)
 
         layers = [
             (220 * intensity, min(255, max(0, int(50 * intensity)))),
@@ -1534,7 +2103,8 @@ class Horror3DGame(arcade.View):
                     drop_size, (150, 20, 20, drop_alpha)
                 )
 
-        vignette_strength = self.vignette + self.fear_induced_darkness * 0.3
+        # Усиленная виньетка при темноте
+        vignette_strength = self.vignette + self.fear_induced_darkness * 0.5 + self.near_monster_effect * 0.2
         if vignette_strength > 0:
             alpha = min(255, max(0, int(200 * vignette_strength)))
             if not self.flashlight_on:
@@ -1563,6 +2133,82 @@ class Horror3DGame(arcade.View):
                 0 + offset_x, self.window.width + offset_x,
                 0 + offset_y, self.window.height + offset_y,
                 (255, 200, 200, alpha)
+            )
+
+    def _draw_hallucinations(self, offset_x=0, offset_y=0):
+        """Отрисовка галлюцинаций"""
+        if self.hallucination_active:
+            for figure in self.shadow_figures:
+                if figure['life'] > 0:
+                    alpha = int((figure['life'] / figure['max_life']) * 100)
+                    if alpha > 0:
+                        arcade.draw_circle_filled(
+                            figure['x'] + offset_x,
+                            figure['y'] + offset_y,
+                            figure['size'],
+                            (0, 0, 0, alpha)
+                        )
+
+    def _draw_blood_veins(self, offset_x=0, offset_y=0):
+        """Отрисовка кровавых прожилок"""
+        if self.player_stress > 70:
+            for vein in self.blood_veins:
+                if vein['alpha'] > 0:
+                    arcade.draw_line(
+                        vein['x1'] + offset_x, vein['y1'] + offset_y,
+                        vein['x2'] + offset_x, vein['y2'] + offset_y,
+                        (150, 20, 20, vein['alpha']),
+                        vein['thickness']
+                    )
+
+    def _draw_whisper_effects(self, offset_x=0, offset_y=0):
+        """Отрисовка эффектов шепотов"""
+        for effect in self.whisper_effects:
+            if effect['alpha'] > 0:
+                arcade.draw_text(
+                    effect['text'],
+                    effect['x'] + offset_x, effect['y'] + offset_y,
+                    (255, 255, 255, effect['alpha']), 16,
+                    anchor_x="center", anchor_y="center"
+                )
+
+    def _draw_i_hint(self):
+        """Подсказка про клавишу I"""
+        alpha = min(255, int(self.i_hint_timer * 50))  # Плавное исчезновение
+
+        arcade.draw_lrbt_rectangle_filled(
+            self.window.width // 2 - 200, self.window.width // 2 + 200,
+            self.window.height - 80, self.window.height - 40,
+            (0, 0, 0, alpha // 2)
+        )
+
+        arcade.draw_text(
+            "Нажмите I для инструкции по управлению",
+            self.window.width // 2, self.window.height - 60,
+            (255, 255, 200, alpha), 18,
+            anchor_x="center", anchor_y="center",
+            bold=True
+        )
+
+    def _draw_time_warning(self):
+        """Предупреждение о времени"""
+        if int(time.time() * 2) % 2 == 0:  # Мигающий эффект
+            remaining_time = self.max_game_time - self.game_time
+            minutes = int(remaining_time // 60)
+            seconds = int(remaining_time % 60)
+
+            arcade.draw_lrbt_rectangle_filled(
+                self.window.width // 2 - 250, self.window.width // 2 + 250,
+                self.window.height - 180, self.window.height - 120,
+                (0, 0, 0, 180)
+            )
+
+            arcade.draw_text(
+                f"ВНИМАНИЕ! ОСТАЛОСЬ {minutes:02d}:{seconds:02d}",
+                self.window.width // 2, self.window.height - 150,
+                (255, 100, 100), 28,
+                anchor_x="center", anchor_y="center",
+                bold=True
             )
 
     def _draw_paranoia_effect(self):
@@ -1603,7 +2249,7 @@ class Horror3DGame(arcade.View):
                 )
 
     def _draw_hud(self):
-        """Интерфейс - упрощенный"""
+        """Интерфейс"""
         arcade.draw_lrbt_rectangle_filled(
             0, self.window.width, 0, 110,
             (0, 0, 0, 180)
@@ -1654,9 +2300,28 @@ class Horror3DGame(arcade.View):
 
         arcade.draw_text(key_text, progress_x, 75, key_color, 22, bold=True)
 
-        # Время
+        # Время с индикацией прогресса
         time_text = f"ВРЕМЯ: {int(self.game_time)}с"
-        arcade.draw_text(time_text, progress_x, 50, arcade.color.LIGHT_GRAY, 18)
+        remaining_time = self.max_game_time - self.game_time
+        time_percent = remaining_time / self.max_game_time
+
+        # Цвет времени в зависимости от оставшегося времени
+        if time_percent > 0.5:
+            time_color = arcade.color.LIGHT_GRAY
+        elif time_percent > 0.25:
+            time_color = (255, 200, 100)
+        else:
+            time_color = (255, 100, 100)
+            if int(time.time()) % 2 == 0:  # Мигание при малом времени
+                time_color = (255, 150, 150)
+
+        arcade.draw_text(time_text, progress_x, 50, time_color, 18)
+
+        # Прогресс-бар времени
+        time_bar_width = 250 * time_percent
+        time_bar_color = time_color
+        arcade.draw_lrbt_rectangle_filled(progress_x - 130, progress_x - 130 + time_bar_width, 15, 25, time_bar_color)
+        arcade.draw_lrbt_rectangle_outline(progress_x - 130, progress_x - 130 + 250, 15, 25, (255, 255, 255, 150), 2)
 
         # Фонарик
         if self.flashlight_on:
@@ -1675,7 +2340,21 @@ class Horror3DGame(arcade.View):
                 battery_color, 16
             )
 
-        # Статус карты (убрали из мини-карты)
+        # Индикатор темноты
+        if self.darkness_stage > 0:
+            darkness_texts = ["СРЕДНЯЯ ТЕМНОТА", "СИЛЬНАЯ ТЕМНОТА"]
+            darkness_colors = [(255, 200, 100), (255, 150, 50)]
+
+            blink = int(time.time() * 2) % 2 == 0
+            if blink:
+                arcade.draw_text(
+                    darkness_texts[self.darkness_stage - 1],
+                    self.window.width // 2, 90,
+                    darkness_colors[self.darkness_stage - 1], 14,
+                    anchor_x="center"
+                )
+
+        # Статус карты
         if self.show_minimap:
             map_status = "КАРТА: ВКЛ"
             map_color = (100, 255, 100)
@@ -1709,7 +2388,7 @@ class Horror3DGame(arcade.View):
             )
 
     def _draw_minimap(self):
-        """Миникарта - без лишних надписей"""
+        """Миникарта"""
         map_size = min(350, int(min(self.window.width, self.window.height) * self.minimap_scale))
         margin = 20
         cell_size = min(map_size // self.map_width, map_size // self.map_height)
@@ -1812,13 +2491,17 @@ class Horror3DGame(arcade.View):
             "3D ХОРРОР ЛАБИРИНТ",
             "Найдите 3 ключа и выход",
             "",
-            "Управление:",
+            f"ВРЕМЯ: {int(self.max_game_time / 60)} минут",
+            f"ЛАБИРИНТ: {self.map_width}x{self.map_height}",
+            "",
+            "ГЛАВНОЕ: Нажмите I для инструкции!",
+            "",
+            "УПРАВЛЕНИЕ:",
             "WASD - движение",
             "Мышь - поворот камеры",
             "F - фонарик",
             "M - карта",
             "ПРОБЕЛ - крик",
-            "I - инструкция",
             "",
             "Нажмите любую клавишу"
         ]
@@ -1832,10 +2515,21 @@ class Horror3DGame(arcade.View):
             elif i == 1:
                 size = 26
                 color = (255, 215, 0)
-            elif i == 3:
+            elif i == 3:  # Время
+                size = 24
+                color = (100, 255, 100)
+            elif i == 4:  # Размер лабиринта
+                size = 20
+                color = (150, 200, 255)
+            elif i == 6:  # Важная подсказка про I
+                size = 24
+                color = (255, 255, 100)
+                if int(time.time() * 2) % 2 == 0:
+                    color = (255, 255, 150)
+            elif i == 8:
                 size = 24
                 color = (100, 200, 255)
-            elif i == 11:
+            elif i == 15:
                 size = 20
                 color = (255, 255, 255)
             else:
@@ -1846,27 +2540,24 @@ class Horror3DGame(arcade.View):
                 text, self.window.width // 2, center_y - y_offset,
                 (*color, alpha), size,
                 anchor_x="center", anchor_y="center",
-                bold=(i in [0, 1, 11])
+                bold=(i in [0, 1, 3, 6, 15])
             )
 
     def _draw_instructions(self):
-        """Инструкция - исправленная и аккуратная"""
-        # Полупрозрачный фон
+        """Инструкция"""
         arcade.draw_lrbt_rectangle_filled(
             0, self.window.width, 0, self.window.height,
             (0, 0, 0, 220)
         )
 
-        # Заголовок
         arcade.draw_text(
-            "ИНСТРУКЦИЯ - 3D ЛАБИРИНТ",
+            "ИНСТРУКЦИЯ - 3D ХОРРОР ЛАБИРИНТ",
             self.window.width // 2, self.window.height - 80,
             (255, 50, 50), 32,
             anchor_x="center", anchor_y="center",
             bold=True
         )
 
-        # Основные разделы с нормальным позиционированием
         sections = [
             ("УПРАВЛЕНИЕ", [
                 "W/S - вперед/назад",
@@ -1878,18 +2569,19 @@ class Horror3DGame(arcade.View):
                 "I - эта инструкция",
                 "ESC - выход в меню"
             ]),
-            ("ЦЕЛЬ ИГРЫ", [
-                "1. Найдите 3 золотых ключа",
-                "2. Найдите красный выход",
-                "3. Избегайте красных монстров",
-                "4. Следите за здоровьем и рассудком"
+            ("НОВЫЕ ОПАСНОСТИ", [
+                f"• Время: {int(self.max_game_time / 60)} минут на прохождение",
+                f"• Лабиринт: {self.map_width}x{self.map_height} клеток",
+                "• Монстры активно перемещаются",
+                "• Темнота усиливается со временем",
+                "• Свет может начать мерцать"
             ]),
             ("ПОДСКАЗКИ", [
-                "• Фонарик разряжается в темноте",
-                "• Монстры преследуют по звуку",
+                "• Ищите 3 золотых ключа",
+                "• Найдите красный выход",
+                "• Избегайте красных монстров",
                 "• В темноте начинаются галлюцинации",
-                "• Крик временно отпугивает монстров",
-                "• Карта поможет ориентироваться"
+                "• Следите за здоровьем и рассудком"
             ])
         ]
 
@@ -1899,7 +2591,6 @@ class Horror3DGame(arcade.View):
         for section_index, (section_title, items) in enumerate(sections):
             y = start_y - section_index * section_spacing
 
-            # Заголовок секции
             arcade.draw_text(
                 section_title,
                 self.window.width // 2, y,
@@ -1908,7 +2599,6 @@ class Horror3DGame(arcade.View):
                 bold=True
             )
 
-            # Элементы секции
             for item_index, item in enumerate(items):
                 item_y = y - 30 - item_index * 25
                 color = (200, 200, 255) if "•" in item else (255, 255, 255)
@@ -1921,7 +2611,6 @@ class Horror3DGame(arcade.View):
 
             start_y -= len(items) * 25 + 60
 
-        # Кнопка закрытия
         arcade.draw_text(
             "Нажмите I или ESCAPE чтобы закрыть",
             self.window.width // 2, 60,
@@ -1954,6 +2643,9 @@ class Horror3DGame(arcade.View):
 
         if self.show_tutorial and self.tutorial_time > 0 and symbol not in [arcade.key.ESCAPE, arcade.key.I]:
             self.show_tutorial = False
+            # Сбрасываем таймер подсказки про I
+            self.show_i_hint = True
+            self.i_hint_timer = 5.0
             return
 
         current_time = time.time()
@@ -1961,6 +2653,8 @@ class Horror3DGame(arcade.View):
 
         if symbol == arcade.key.I:
             self.show_instructions = not self.show_instructions
+            # Скрываем подсказку при нажатии I
+            self.show_i_hint = False
             return
 
         if self.show_instructions and symbol == arcade.key.ESCAPE:
@@ -2033,203 +2727,22 @@ class Horror3DGame(arcade.View):
         self.victory = True
         self.game_over = True
 
-        # Победный звук
+        # Останавливаем музыку
+        self.stop_background_music()
+
         if self.sound_manager:
             self.sound_manager.play_sound('music', volume=0.4)
 
         self.end_game()
 
-    def create_hud_text_objects(self):
-        """Создать текстовые объекты для HUD (для производительности)"""
-        # Здоровье
-        self.health_text = arcade.Text(
-            "ЗДОРОВЬЕ: 100%",
-            25, 25,
-            arcade.color.WHITE, 16
-        )
-
-        # Рассудок
-        self.sanity_text = arcade.Text(
-            "РАССУДОК: 100%",
-            25, 50,
-            arcade.color.LIGHT_GRAY, 14
-        )
-
-        # Стресс
-        self.stress_text = arcade.Text(
-            "СТРЕСС: 30%",
-            25, 75,
-            arcade.color.WHITE, 14
-        )
-
-        # Ключи
-        self.keys_text = arcade.Text(
-            "КЛЮЧИ: 0/3",
-            self.window.width - 280, 75,
-            arcade.color.WHITE, 22
-        )
-
-        # Время
-        self.time_text = arcade.Text(
-            "ВРЕМЯ: 0с",
-            self.window.width - 280, 50,
-            arcade.color.LIGHT_GRAY, 18
-        )
-
-        # Фонарик
-        self.flashlight_text = arcade.Text(
-            "ФОНАРИК: 100%",
-            self.window.width // 2 - 100, 25,
-            (100, 255, 100), 16
-        )
-
-        # Карта
-        self.map_text = arcade.Text(
-            "КАРТА: ВЫКЛ",
-            self.window.width - 50, 15,
-            (200, 200, 200), 12,
-            anchor_x="center"
-        )
-
-    def update_hud_text(self):
-        """Обновить текст HUD"""
-        # Обновляем текст с текущими значениями
-        self.health_text.text = f"ЗДОРОВЬЕ: {int(self.player_health)}%"
-
-        if self.player_health > 60:
-            self.health_text.color = arcade.color.WHITE
-        elif self.player_health > 30:
-            self.health_text.color = (255, 150, 50)
-        else:
-            self.health_text.color = (255, 50, 50)
-            if int(time.time() * 2) % 2 == 0:
-                self.health_text.color = (255, 100, 100)
-
-        self.sanity_text.text = f"РАССУДОК: {int(self.player_sanity)}%"
-        self.stress_text.text = f"СТРЕСС: {int(self.player_stress)}%"
-
-        if self.player_stress > 70:
-            self.stress_text.color = (255, 50, 50)
-        elif self.player_stress > 40:
-            self.stress_text.color = (255, 150, 50)
-        else:
-            self.stress_text.color = (255, 200, 100)
-
-        self.keys_text.text = f"КЛЮЧИ: {self.keys_collected}/{self.keys_needed}"
-        if self.keys_collected >= self.keys_needed:
-            if int(time.time() * 2) % 2 == 0:
-                self.keys_text.color = (255, 255, 150)
-            else:
-                self.keys_text.color = (255, 215, 0)
-        else:
-            self.keys_text.color = arcade.color.WHITE
-
-        self.time_text.text = f"ВРЕМЯ: {int(self.game_time)}с"
-
-        if self.flashlight_on:
-            battery = int(self.flashlight_battery)
-            if battery > 50:
-                self.flashlight_text.color = (100, 255, 100)
-            elif battery > 20:
-                self.flashlight_text.color = (255, 200, 100)
-            else:
-                self.flashlight_text.color = (255, 100, 100)
-                if int(time.time()) % 2 == 0:
-                    self.flashlight_text.color = (255, 150, 150)
-            self.flashlight_text.text = f"ФОНАРИК: {battery}%"
-        else:
-            self.flashlight_text.text = "ФОНАРИК: ВЫКЛ"
-            self.flashlight_text.color = (200, 200, 200)
-
-        if self.show_minimap:
-            self.map_text.text = "КАРТА: ВКЛ"
-            self.map_text.color = (100, 255, 100)
-        else:
-            self.map_text.text = "КАРТА: ВЫКЛ"
-            self.map_text.color = (200, 200, 200)
-
-    # В методе _draw_hud замените arcade.draw_text на рисование объектов:
-    def _draw_hud(self):
-        """Интерфейс - упрощенный"""
-        arcade.draw_lrbt_rectangle_filled(
-            0, self.window.width, 0, 110,
-            (0, 0, 0, 180)
-        )
-
-        # Полоски здоровья, рассудка и стресса (остаются как есть)
-        health_width = 250 * (self.player_health / 100.0)
-        if self.player_health > 60:
-            health_color = (50, 200, 50)
-        elif self.player_health > 30:
-            health_color = (255, 150, 50)
-        else:
-            health_color = (255, 50, 50)
-            if int(time.time() * 2) % 2 == 0:
-                health_color = (255, 100, 100)
-
-        arcade.draw_lrbt_rectangle_filled(20, 20 + health_width, 20, 40, health_color)
-        arcade.draw_lrbt_rectangle_outline(20, 270, 20, 40, (255, 255, 255, 150), 2)
-
-        sanity_width = 250 * (self.player_sanity / 100.0)
-        sanity_color = (100, 100, 200)
-        arcade.draw_lrbt_rectangle_filled(20, 20 + sanity_width, 45, 65, sanity_color)
-        arcade.draw_lrbt_rectangle_outline(20, 270, 45, 65, (255, 255, 255, 150), 2)
-
-        stress_width = 250 * (self.player_stress / 100.0)
-        if self.player_stress > 70:
-            stress_color = (255, 50, 50)
-        elif self.player_stress > 40:
-            stress_color = (255, 150, 50)
-        else:
-            stress_color = (255, 200, 100)
-
-        arcade.draw_lrbt_rectangle_filled(20, 20 + stress_width, 70, 90, stress_color)
-        arcade.draw_lrbt_rectangle_outline(20, 270, 70, 90, (255, 255, 255, 150), 2)
-
-        # Обновляем и рисуем текстовые объекты
-        if not hasattr(self, 'health_text'):
-            self.create_hud_text_objects()
-
-        self.update_hud_text()
-
-        # Рисуем все текстовые объекты
-        self.health_text.draw()
-        self.sanity_text.draw()
-        self.stress_text.draw()
-        self.keys_text.draw()
-        self.time_text.draw()
-        self.flashlight_text.draw()
-        self.map_text.draw()
-
-        # Сообщения (для них тоже можно создать Text объекты)
-        if self.exit_found:
-            blink = int(time.time() * 3) % 2 == 0
-            if blink:
-                if not hasattr(self, 'exit_found_text'):
-                    self.exit_found_text = arcade.Text(
-                        "✓ ВЫХОД НАЙДЕН!",
-                        self.window.width // 2, self.window.height - 60,
-                        (255, 50, 50), 26,
-                        anchor_x="center", anchor_y="center", bold=True
-                    )
-                self.exit_found_text.draw()
-        elif self.keys_collected >= self.keys_needed:
-            if not hasattr(self, 'all_keys_text'):
-                self.all_keys_text = arcade.Text(
-                    "ВСЕ КЛЮЧИ НАЙДЕНЫ! ИЩИТЕ ВЫХОД!",
-                    self.window.width // 2, self.window.height - 60,
-                    (255, 215, 0), 24,
-                    anchor_x="center", anchor_y="center", bold=True
-                )
-            self.all_keys_text.draw()
-
-
     def _end_game(self, reason: str):
-        """Поражение - переход на экран проигрыша"""
+        """Поражение"""
         self.game_active = False
         self.game_over = True
 
-        # Собираем статистику для экрана проигрыша
+        # Останавливаем музыку
+        self.stop_background_music()
+
         game_stats = {
             'time': self.game_time,
             'keys_collected': self.keys_collected,
@@ -2237,16 +2750,15 @@ class Horror3DGame(arcade.View):
             'stress_level': self.player_stress,
             'sanity_level': self.player_sanity,
             'jump_scares': self.jump_scares_triggered,
-            'monsters_killed': self.monsters_killed
+            'monsters_killed': self.monsters_killed,
+            'time_out': self.time_out
         }
 
-        # Импортируем и показываем экран проигрыша
         try:
             from game_over import GameOverView
             game_over_view = GameOverView(reason, game_stats)
             self.window.show_view(game_over_view)
         except ImportError:
-            # Fallback: возвращаемся в меню
             from scenes.main_menu import MainMenuView
             menu_view = MainMenuView()
             self.window.show_view(menu_view)
@@ -2271,3 +2783,149 @@ class Horror3DGame(arcade.View):
             except ImportError:
                 from scenes.main_menu import MainMenuView
                 self.window.show_view(MainMenuView())
+
+    # ==================== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ====================
+
+    def _find_start_position(self) -> Tuple[float, float]:
+        """Найти открытую позицию для старта"""
+        open_areas = []
+
+        for y in range(self.map_height):
+            for x in range(self.map_width):
+                if self.map[y][x] == 0:
+                    space = 0
+                    for dy in range(-2, 3):
+                        for dx in range(-2, 3):
+                            nx, ny = x + dx, y + dy
+                            if (0 <= nx < self.map_width and 0 <= ny < self.map_height and
+                                    self.map[ny][nx] == 0):
+                                space += 1
+
+                    if space >= 20:
+                        open_areas.append((x, y, space))
+
+        if open_areas:
+            open_areas.sort(key=lambda a: a[2], reverse=True)
+            return open_areas[0][0] + 0.5, open_areas[0][1] + 0.5
+
+        return self.map_width // 2 + 0.5, self.map_height // 2 + 0.5
+
+    def _find_far_position(self, from_x: float, from_y: float) -> Tuple[int, int]:
+        """Найти позицию далеко от заданной"""
+        max_distance = 0
+        far_pos = (self.map_width - 2, self.map_height - 2)
+
+        for y in range(self.map_height):
+            for x in range(self.map_width):
+                if self.map[y][x] == 0:
+                    distance = math.sqrt((x - from_x) ** 2 + (y - from_y) ** 2)
+                    if distance > max_distance:
+                        max_distance = distance
+                        far_pos = (x, y)
+
+        return far_pos
+
+    def _create_collision_map(self):
+        """Создать карту коллизий"""
+        return [[cell == 1 for cell in row] for row in self.map]
+
+    def _create_walls_list(self):
+        """Создать список стен"""
+        walls = []
+        for y in range(self.map_height):
+            for x in range(self.map_width):
+                if self.map[y][x] == 1:
+                    walls.append({
+                        'x': x * self.tile_size,
+                        'y': y * self.tile_size,
+                        'width': self.tile_size,
+                        'height': self.tile_size
+                    })
+        return walls
+
+    def check_collision(self, x, y):
+        """Проверить коллизию"""
+        ix, iy = int(x), int(y)
+
+        if 0 <= ix < self.map_width and 0 <= iy < self.map_height:
+            return self.collision_map[iy][ix]
+
+        return True
+
+    def _place_objects(self):
+        """Разместить объекты на карте"""
+        self.objectives.clear()
+
+        free_cells = []
+        for y in range(self.map_height):
+            for x in range(self.map_width):
+                if self.map[y][x] == 0:
+                    dist_to_player = math.sqrt((x - self.player_x) ** 2 + (y - self.player_y) ** 2)
+                    if dist_to_player > 3:
+                        free_cells.append((x, y))
+
+        if not free_cells:
+            return
+
+        for _ in range(self.keys_needed):
+            if not free_cells:
+                break
+
+            x, y = random.choice(free_cells)
+            free_cells.remove((x, y))
+
+            self.objectives.append(Objective(
+                x=x + 0.5,
+                y=y + 0.5,
+                type='key',
+                collected=False,
+                pulse=random.random() * math.pi * 2
+            ))
+
+        exit_x, exit_y = self.exit_location
+        self.objectives.append(Objective(
+            x=exit_x + 0.5,
+            y=exit_y + 0.5,
+            type='exit',
+            collected=False,
+            pulse=0.0
+        ))
+
+    def _init_monsters(self):
+        """Инициализировать монстров"""
+        dead_ends = []
+        for y in range(1, self.map_height - 1):
+            for x in range(1, self.map_width - 1):
+                if self.map[y][x] == 0:
+                    walls = 0
+                    for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                        if self.map[y + dy][x + dx] == 1:
+                            walls += 1
+                    if walls >= 3:
+                        dead_ends.append((x, y))
+
+        for i in range(min(3, len(dead_ends))):  # 3 монстра
+            x, y = dead_ends[i]
+
+            patrol_path = []
+            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                nx, ny = x + dx, y + dy
+                if (0 <= nx < self.map_width and 0 <= ny < self.map_height and
+                        self.map[ny][nx] == 0):
+                    patrol_path.append((nx + 0.5, ny + 0.5))
+
+            if not patrol_path:
+                patrol_path = [(x + 0.5, y + 0.5)]
+
+            monster = Monster(
+                x=x + 0.5,
+                y=y + 0.5,
+                speed=0.004 * self.fear_amplifiers['monsters'],
+                detection_range=2.5,
+                patrol_path=patrol_path,
+                spawn_x=x + 0.5,
+                spawn_y=y + 0.5,
+                move_delay=random.uniform(2.0, 5.0),  # БОЛЬШЕ ЧАСТОТА
+                wander_range=random.uniform(10.0, 15.0)  # БОЛЬШЕ РАДИУС
+            )
+            self.monsters.append(monster)
