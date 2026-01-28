@@ -1,4 +1,3 @@
-# results.py - ИСПРАВЛЕННЫЙ ВАРИАНТ с правильными функциями Arcade
 import arcade
 import random
 from arcade.gui import UIManager, UILabel, UIAnchorLayout, UIBoxLayout, UIFlatButton
@@ -171,7 +170,6 @@ class ResultsView(arcade.View):
                         random.randint(20, 40),
                         random.randint(40, 70)
                     )
-                    # ИСПРАВЛЕНО: используем draw_lrbt_rectangle_filled
                     left = x
                     right = x + cell_size
                     bottom = y

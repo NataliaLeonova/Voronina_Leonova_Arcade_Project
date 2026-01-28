@@ -1,4 +1,3 @@
-# config.py
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
 SCREEN_TITLE = "FEAR_OS: Персональный кошмар"

@@ -1,4 +1,3 @@
-# maze_helper.py
 import math
 import random
 from typing import List, Tuple

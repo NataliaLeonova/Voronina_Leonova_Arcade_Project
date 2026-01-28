@@ -1,4 +1,3 @@
-# level_select.py - с отображением данных калибровки
 import arcade
 import json
 import os

@@ -1,4 +1,3 @@
-# level1_complete.py - без лишнего вывода
 import arcade
 import json
 import os

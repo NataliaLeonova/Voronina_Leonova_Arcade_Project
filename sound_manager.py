@@ -1,4 +1,3 @@
-# sound_manager.py - без лишнего вывода
 import arcade
 import os
 import random

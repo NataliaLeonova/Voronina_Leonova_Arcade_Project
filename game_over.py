@@ -1,4 +1,3 @@
-# game_over.py - экран проигрыша (исправленная версия)
 import arcade
 import random
 import time
@@ -169,7 +168,6 @@ class GameOverView(arcade.View):
         # Частицы крови
         for particle in self.particles:
             if particle['life'] > 0:
-                # ИСПРАВЛЕНИЕ: ограничиваем alpha 0-255
                 alpha = max(0, min(255, int(particle['life'] * 100)))
                 arcade.draw_circle_filled(
                     particle['x'] + shake_x,
@@ -180,7 +178,6 @@ class GameOverView(arcade.View):
 
         # Вспышка
         if self.flash_alpha > 0:
-            # ИСПРАВЛЕНИЕ: ограничиваем alpha 0-255
             flash_alpha = max(0, min(255, self.flash_alpha))
             flash_color = (255, 200, 200) if self.reason == "СМЕРТЬ" else (200, 150, 255)
             arcade.draw_lrbt_rectangle_filled(

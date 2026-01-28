@@ -1,4 +1,3 @@
-# help_button.py
 import arcade
 
 
@@ -69,14 +68,10 @@ class HelpButton:
 
     def show_help(self):
         """Показать справку"""
-        try:
-            from rules import RulesManager
-            # Сохраняем текущий вид
-            self.window.current_view = self.window.current_view
+        from rules import RulesManager
+        # Сохраняем текущий вид
+        self.window.current_view = self.window.current_view
 
-            # Показываем правила
-            rules_view = RulesManager.show_rules(self.window, self.level_type)
-            self.window.show_view(rules_view)
-        except ImportError:
-            # Простой fallback
-            print("Помощь: Используйте WASD для движения, M для карты, F для фонарика")
+        # Показываем правила
+        rules_view = RulesManager.show_rules(self.window, self.level_type)
+        self.window.show_view(rules_view)

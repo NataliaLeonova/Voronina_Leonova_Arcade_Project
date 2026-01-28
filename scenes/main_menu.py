@@ -1,4 +1,3 @@
-# main_menu.py - обновленная версия
 import arcade
 from arcade.gui import UIManager, UILabel, UIAnchorLayout, UIBoxLayout, UIFlatButton
 
@@ -111,10 +110,6 @@ class MainMenuView(arcade.View):
 
     def show_rules(self):
         """Показать правила"""
-        try:
-            from rules import RulesManager
-            rules_view = RulesManager.show_rules(self.window, "general")
-            self.window.show_view(rules_view)
-        except ImportError:
-            # Fallback: простой текст
-            print("Правила: Найдите выход, избегайте опасностей")
+        from rules import RulesManager
+        rules_view = RulesManager.show_rules(self.window, "general")
+        self.window.show_view(rules_view)

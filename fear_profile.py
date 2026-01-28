@@ -1,4 +1,3 @@
-# fear_profile.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import json
 import os
 import time
@@ -142,7 +141,6 @@ class FearProfile:
             data = asdict(self)
             json.dump(data, f, indent=2, ensure_ascii=False, default=str)
 
-        print(f"Профиль сохранен: {filename}")
         return filename
 
 

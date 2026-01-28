@@ -1,4 +1,3 @@
-# fear_calibration.py - без лишнего вывода
 import arcade
 import time
 import random

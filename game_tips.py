@@ -1,4 +1,3 @@
-# game_tips.py
 import random
 
 

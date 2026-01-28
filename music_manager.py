@@ -1,4 +1,3 @@
-# music_manager.py
 import arcade
 import os
 import random
@@ -23,19 +22,12 @@ class MusicManager:
         if os.path.exists(music_folder):
             for file in os.listdir(music_folder):
                 if file.lower().endswith(('.wav', '.ogg', '.mp3')):
-                    try:
-                        path = os.path.join(music_folder, file)
-                        self.playlist.append({
-                            'path': path,
-                            'name': file,
-                            'type': self.detect_music_type(file)
-                        })
-                        print(f"🎵 Загружена музыка: {file}")
-                    except Exception as e:
-                        print(f"Ошибка загрузки музыки {file}: {e}")
-
-        if not self.playlist:
-            print("⚠️ Кастомная музыка не найдена. Создайте папку custom_sounds/music")
+                    path = os.path.join(music_folder, file)
+                    self.playlist.append({
+                        'path': path,
+                        'name': file,
+                        'type': self.detect_music_type(file)
+                    })
 
     def detect_music_type(self, filename: str) -> str:
         """Определить тип музыки по названию файла"""
@@ -68,42 +60,41 @@ class MusicManager:
         # Выбираем случайный трек
         track = random.choice(available_tracks)
 
-        try:
-            # Останавливаем текущую музыку
-            if self.current_music:
-                self.current_music.stop()
-
-            # Загружаем и воспроизводим новую
-            self.current_music = arcade.load_sound(track['path'], streaming=True)
-            self.current_music.play(volume=self.music_volume, loop=loop)
-            print(f"🎶 Играет: {track['name']} ({track['type']})")
-
-        except Exception as e:
-            print(f"Ошибка воспроизведения музыки: {e}")
-
-    def play_tension_music(self, stress_level: float):
-        """Воспроизвести напряженную музыку в зависимости от стресса"""
-        if stress_level > 80:
-            self.play_music('action')
-        elif stress_level > 60:
-            self.play_music('tension')
-        elif stress_level > 40:
-            self.play_music('ambient')
-
-    def stop_music(self):
-        """Остановить музыку"""
+        # Останавливаем текущую музыку
         if self.current_music:
             self.current_music.stop()
-            self.current_music = None
 
-    def set_volume(self, volume: float):
-        """Установить громкость музыки"""
-        self.music_volume = max(0.0, min(1.0, volume))
-        if self.current_music:
-            # В Arcade нельзя изменить громкость на лету, нужно перезапустить
-            pass
+        # Загружаем и воспроизводим новую
+        self.current_music = arcade.load_sound(track['path'], streaming=True)
+        self.current_music.play(volume=self.music_volume, loop=loop)
 
-    def fade_out(self, duration: float = 2.0):
-        """Плавное затухание музыки"""
-        # В Arcade нет встроенного фейда, но можно эмулировать
-        self.stop_music()
+
+def play_tension_music(self, stress_level: float):
+    """Воспроизвести напряженную музыку в зависимости от стресса"""
+    if stress_level > 80:
+        self.play_music('action')
+    elif stress_level > 60:
+        self.play_music('tension')
+    elif stress_level > 40:
+        self.play_music('ambient')
+
+
+def stop_music(self):
+    """Остановить музыку"""
+    if self.current_music:
+        self.current_music.stop()
+        self.current_music = None
+
+
+def set_volume(self, volume: float):
+    """Установить громкость музыки"""
+    self.music_volume = max(0.0, min(1.0, volume))
+    if self.current_music:
+        # В Arcade нельзя изменить громкость на лету, нужно перезапустить
+        pass
+
+
+def fade_out(self, duration: float = 2.0):
+    """Плавное затухание музыки"""
+    # В Arcade нет встроенного фейда, но можно эмулировать
+    self.stop_music()

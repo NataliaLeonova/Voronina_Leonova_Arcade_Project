@@ -183,7 +183,6 @@ class MazeGenerator:
                 # Возвращаемся назад
                 stack.pop()
 
-        # УБЕДИТЕЛЬНО ОБЕСПЕЧИВАЕМ СВЯЗНОСТЬ
         MazeGenerator._ensure_perfect_connectivity(maze, width, height)
 
         # Создаем несколько дополнительных проходов для лучшей проходимости
@@ -466,12 +465,12 @@ class FearAnalyzer:
 
 
 class Horror3DGame(arcade.View):
-    """3D хоррор-лабиринт с улучшенной атмосферой"""
+    """3D хоррор-лабиринт"""
 
     def __init__(self, fear_profile=None):
         super().__init__()
 
-        # === ПЕРЕМЕННЫЕ ДЛЯ ЗВУКОВ ===
+        # Переменные для звуков
         self.sound_manager = None
         self.sound_timer = 0
         self.last_step_sound = 0
@@ -497,7 +496,7 @@ class Horror3DGame(arcade.View):
         # Инициализируем звуковую систему
         self.init_sound_manager()
 
-        # === ОСНОВНЫЕ ПЕРЕМЕННЫЕ ===
+        # Основные переменные
         self.fear_analyzer = FearAnalyzer()
         self.behavior_data = BehaviorData()
         self.fear_amplifiers = self.fear_analyzer.fear_amplifiers.copy()
@@ -505,12 +504,12 @@ class Horror3DGame(arcade.View):
         self.last_activity_time = time.time()
         self.inactivity_start = 0
 
-        # === НАСТРОЙКИ ИГРОКА ===
-        self.map_width = 31  # НЕЧЕТНОЕ ЧИСЛО для идеального лабиринта
-        self.map_height = 31  # НЕЧЕТНОЕ ЧИСЛО для идеального лабиринта
+        # Настройка игрока
+        self.map_width = 31
+        self.map_height = 31
         self.tile_size = 64
 
-        # Генерация СОВЕРШЕННОГО лабиринта
+        # Генерация лабиринта
         self.map = MazeGenerator.generate_perfect_maze(self.map_width, self.map_height)
         self.maze = self.map
 
@@ -522,9 +521,9 @@ class Horror3DGame(arcade.View):
         self.player_stress = 30.0
         self.player_fov = math.pi / 1.8
 
-        # === ВРЕМЯ ИГРЫ ===
+        # Время игры
         self.game_time = 0.0
-        self.max_game_time = 600.0  # УВЕЛИЧЕНО ДО 15 МИНУТ (было 300)
+        self.max_game_time = 600.0
         self.time_warning_timer = 0.0
         self.show_time_warning = False
         self.time_since_last_scare = 0.0
@@ -532,12 +531,12 @@ class Horror3DGame(arcade.View):
         self.time_since_last_analysis = 0.0
         self.start_time = time.time()
 
-        # === КОЛЛИЗИИ ===
+        # Коллизии
         self.collision_map = self._create_collision_map()
         self.walls = self._create_walls_list()
         self.exit_location = self._find_far_position(self.player_x, self.player_y)
 
-        # === ИНТЕРФЕЙС ===
+        # ИНТЕРФЕЙС
         self.show_minimap = False
         self.last_minimap_toggle = 0
         self.minimap_cooldown = 0.3
@@ -546,7 +545,7 @@ class Horror3DGame(arcade.View):
         self.show_i_hint = True  # Флаг для показа подсказки про клавишу I
         self.i_hint_timer = 5.0  # 5 секунд показываем подсказку
 
-        # === ОБЪЕКТЫ ===
+        # ОБЪЕКТЫ
         self.objectives: List[Objective] = []
         self.keys_collected = 0
         self.keys_needed = 3  # Возвращаем 3 ключа
@@ -554,14 +553,14 @@ class Horror3DGame(arcade.View):
         self.exit_found = False
         self._place_objects()
 
-        # === ОСВЕЩЕНИЕ (новые эффекты) ===
+        # ОСВЕЩЕНИЕ
         self.flashlight_on = True
-        self.flashlight_battery = 200.0  # УВЕЛИЧЕНА БАТАРЕЙКА (было 150)
+        self.flashlight_battery = 200.0
         self.flashlight_flicker = 0.0
         self.ambient_light = 1.0
         self.light_level = 1.0
 
-        # === НОВЫЕ ЭФФЕКТЫ ОСВЕЩЕНИЯ ===
+        # ЭФФЕКТЫ ОСВЕЩЕНИЯ
         self.darkness_timer = 0.0
         self.darkness_stage = 0  # 0-нормально, 1-средняя темнота, 2-темно
         self.darkness_target = 0.0
@@ -589,26 +588,26 @@ class Horror3DGame(arcade.View):
         self.flash_effect = 0.0
         self.walk_bob = 0.0
 
-        # === НОВЫЕ ЖУТКИЕ ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ===
+        # ЖУТКИЕ ВИЗУАЛЬНЫЕ ЭФФЕКТЫ
         self.hallucination_timer = 0.0
         self.hallucination_active = False
         self.shadow_figures = []  # Теневые фигуры для галлюцинаций
         self.blood_veins = []  # Кровавые прожилки на экране
         self.whisper_effects = []  # Эффекты шепотов
 
-        # === ЧАСТИЦЫ ===
+        # ЧАСТИЦЫ
         self.particles: List[Particle] = []
         self.blood_particles: List[Particle] = []
 
-        # === МОНСТРЫ ===
+        # МОНСТРЫ
         self.monsters: List[Monster] = []
         self._init_monsters()
 
-        # === НОВЫЕ ЭФФЕКТЫ ПРИБЛИЖЕНИЯ К МОНСТРАМ ===
+        # ЭФФЕКТЫ ПРИБЛИЖЕНИЯ К МОНСТРАМ
         self.near_monster_effect = 0.0
         self.monster_proximity_timer = 0.0
 
-        # === УПРАВЛЕНИЕ ===
+        # УПРАВЛЕНИЕ
         self.keys_pressed = {
             arcade.key.W: False,
             arcade.key.S: False,
@@ -627,7 +626,7 @@ class Horror3DGame(arcade.View):
         self.random_event_timer = 0.0
         self.next_event_time = random.uniform(30.0, 60.0)
 
-        # === СОСТОЯНИЕ ===
+        # СОСТОЯНИЕ
         self.game_active = True
         self.game_won = False
         self.show_tutorial = True
@@ -636,21 +635,17 @@ class Horror3DGame(arcade.View):
         self.victory = False
         self.time_out = False  # Флаг окончания времени
 
-        # === СТАТИСТИКА ===
+        # СТАТИСТИКА
         self.jump_scares_triggered = 0
         self.monsters_killed = 0
 
-        # === АДАПТИВНЫЕ ЭФФЕКТЫ ===
+        # АДАПТИВНЫЕ ЭФФЕКТЫ
         self.adaptive_music_pitch = 1.0
         self.adaptive_sound_volume = 1.0
         self.fear_induced_darkness = 0.0
 
         # Инициализируем визуальные эффекты
         self._init_visual_effects()
-
-        print("Запуск улучшенного 3D лабиринта...")
-        print(f"Размер лабиринта: {self.map_width}x{self.map_height}")
-        print(f"Время на прохождение: {self.max_game_time / 60:.1f} минут")
 
     def _init_visual_effects(self):
         """Инициализировать визуальные эффекты"""
@@ -691,7 +686,7 @@ class Horror3DGame(arcade.View):
                 'max_life': random.uniform(2.0, 4.0)
             })
 
-    # ==================== ЗВУКОВАЯ СИСТЕМА ====================
+    # ЗВУКОВАЯ СИСТЕМА
 
     def init_sound_manager(self):
         """Инициализировать звуки"""
@@ -700,8 +695,7 @@ class Horror3DGame(arcade.View):
             self.sound_manager = SoundManager(sound_mode="level2")
             self.sound_manager.set_volume(1.0)
             self.start_background_music()
-        except Exception as e:
-            print(f"Ошибка звуков: {e}")
+        except Exception:
             self.sound_manager = None
 
     def start_background_music(self):
@@ -710,69 +704,58 @@ class Horror3DGame(arcade.View):
             return
 
         if not self.music_playing and self.sound_manager.sounds.get('music'):
-            try:
-                # Пытаемся выбрать случайную музыку из папки music
-                music_list = self.sound_manager.sounds.get('music', [])
-                if music_list:
-                    music_data = random.choice(music_list)
-                    self.current_music = music_data['sound']
-                    # Запускаем музыку с циклом
-                    self.current_music.play(volume=self.music_volume, loop=True)
-                    self.music_playing = True
-                    print("Фоновая музыка запущена")
-            except Exception as e:
-                print(f"Ошибка при запуске музыки: {e}")
+            # Выбираем случайную музыку из папки music
+            music_list = self.sound_manager.sounds.get('music', [])
+            if music_list:
+                music_data = random.choice(music_list)
+                self.current_music = music_data['sound']
+                # Запускаем музыку с циклом
+                self.current_music.play(volume=self.music_volume, loop=True)
+                self.music_playing = True
 
     def stop_background_music(self):
         """Остановить фоновую музыку"""
         if self.music_playing and self.current_music:
-            try:
-                self.current_music.stop()
-                self.music_playing = False
-                print("Фоновая музыка остановлена")
-            except:
-                pass
+            self.current_music.stop()
+            self.music_playing = False
 
     def play_jumpscare_3d(self):
-        """Скример - ОЧЕНЬ ГРОМКИЙ"""
+        """Скример"""
         if self.sound_manager:
-            try:
-                # Останавливаем музыку на время скримера
-                if self.music_playing and self.current_music:
-                    self.current_music.stop()
-                    self.music_playing = False
+            # Останавливаем музыку на время скримера
+            if self.music_playing and self.current_music:
+                self.current_music.stop()
+                self.music_playing = False
 
-                # Ищем звук в папке jumpscare
-                jumpscare_sounds = []
-                for category, sounds in self.sound_manager.sounds.items():
-                    for sound_data in sounds:
-                        if 'jumpscare' in sound_data.get('name', '').lower() or 'scare' in sound_data.get('name',
-                                                                                                          '').lower():
-                            jumpscare_sounds.append(sound_data)
+            # Ищем звук в папке jumpscare
+            jumpscare_sounds = []
+            for category, sounds in self.sound_manager.sounds.items():
+                for sound_data in sounds:
+                    if 'jumpscare' in sound_data.get('name', '').lower() or 'scare' in sound_data.get('name',
+                                                                                                      '').lower():
+                        jumpscare_sounds.append(sound_data)
 
-                # Если нет специальных звуков скримеров, используем обычные scream
-                if not jumpscare_sounds:
-                    jumpscare_sounds = self.sound_manager.sounds.get('scream', [])
+            # Если нет специальных звуков скримеров, используем обычные scream
+            if not jumpscare_sounds:
+                jumpscare_sounds = self.sound_manager.sounds.get('scream', [])
 
-                if jumpscare_sounds:
-                    sound_data = random.choice(jumpscare_sounds)
-                    # ОЧЕНЬ ГРОМКИЙ звук
-                    sound_data['sound'].play(volume=self.jumpscare_volume * 1.5)
+            if jumpscare_sounds:
+                sound_data = random.choice(jumpscare_sounds)
+                # ОЧЕНЬ ГРОМКИЙ звук
+                sound_data['sound'].play(volume=self.jumpscare_volume * 1.5)
 
-                    # Добавляем резкие звуки с задержкой
-                    arcade.schedule(lambda dt: self.play_sudden_sound(volume=0.7), 0.2)
-                    arcade.schedule(lambda dt: self.play_sudden_sound(volume=0.5), 0.5)
+                # Добавляем резкие звуки с задержкой
+                arcade.schedule(lambda dt: self.play_sudden_sound(volume=0.7), 0.2)
+                arcade.schedule(lambda dt: self.play_sudden_sound(volume=0.5), 0.5)
 
-                    # Перезапускаем музыку через 2 секунды
-                    arcade.schedule(lambda dt: self.start_background_music(), 2.0)
+                # Перезапускаем музыку через 2 секунды
+                arcade.schedule(lambda dt: self.start_background_music(), 2.0)
 
-                    self.camera_shake = 1.0
-                    self.flash_effect = 1.0
-                    self.player_stress = min(100, self.player_stress + 40)  # Больше стресса
-                    self.player_sanity = max(0, self.player_sanity - 25)  # Больше потери рассудка
-                    self.jump_scares_triggered += 1
-            except Exception as e:
-                print(f"Ошибка при воспроизведении скримера: {e}")
+                self.camera_shake = 1.0
+                self.flash_effect = 1.0
+                self.player_stress = min(100, self.player_stress + 40)  # Больше стресса
+                self.player_sanity = max(0, self.player_sanity - 25)  # Больше потери рассудка
+                self.jump_scares_triggered += 1
 
     def play_sudden_sound(self, volume=0.5):
         """Воспроизвести резкий звук"""
@@ -796,7 +779,7 @@ class Horror3DGame(arcade.View):
         self.sound_timer += delta_time
         self.sudden_sound_timer += delta_time
 
-        # 1. ЗВУКИ ШАГОВ
+        # ЗВУКИ ШАГОВ
         if self.is_moving:
             if current_time - self.last_step_sound > self.step_interval:
                 volume = 0.3 + random.random() * 0.1
@@ -804,16 +787,15 @@ class Horror3DGame(arcade.View):
                 self.last_step_sound = current_time
                 self.step_counter += 1
 
-        # 2. АТМОСФЕРНЫЕ звуки - ТОЛЬКО ТИХИЕ
+        # Тихие звуки
         if current_time - self.last_ambient_sound > self.ambient_interval:
-            # Только тихие атмосферные звуки
             sound_type = random.choice(['ambient', 'drip', 'wind'])
             volume = 0.1 + random.random() * 0.1  # Очень тихо
             self.sound_manager.play_sound(sound_type, volume=volume * self.sfx_volume)
             self.last_ambient_sound = current_time
             self.ambient_interval = random.randint(10, 20)  # Реже
 
-        # 3. ШЕПОТЫ - ТОЛЬКО ТИХИЕ
+        # Шепот
         if random.random() < 0.005:  # Реже
             volume = 0.08 + random.random() * 0.05  # Очень тихо
             self.sound_manager.play_sound('whisper', volume=volume * self.sfx_volume)
@@ -828,7 +810,7 @@ class Horror3DGame(arcade.View):
                     effect['life'] = effect['max_life']
                     break
 
-        # 4. СЕРДЦЕБИЕНИЕ
+        # СЕРДЦЕБИЕНИЕ
         if self.player_stress > 60 or self.near_monster_effect > 0.5:
             self.heartbeat_timer += delta_time
             heartbeat_interval = max(0.1, 1.0 - max(self.player_stress - 60, self.near_monster_effect * 50) / 100)
@@ -841,7 +823,7 @@ class Horror3DGame(arcade.View):
         else:
             self.heartbeat_active = False
 
-        # 5. ЗВУКИ МОНСТРОВ - ТОЛЬКО КОГДА БЛИЗКО
+        # ЗВУКИ МОНСТРОВ - ТОЛЬКО КОГДА БЛИЗКО
         self.monster_sound_timer += delta_time
         if self.monster_sound_timer > 3.0:  # Реже
             for monster in self.monsters:
@@ -859,7 +841,7 @@ class Horror3DGame(arcade.View):
 
             self.monster_sound_timer = 0
 
-        # 6. ВНЕЗАПНЫЕ звуки - ТОЛЬКО В КЛЮЧЕВЫЕ МОМЕНТЫ
+        # ВНЕЗАПНЫЕ звуки
         if self.sudden_sound_timer > self.sudden_sound_interval:
             # Проверяем условия для резкого звука
             should_play = False
@@ -885,8 +867,6 @@ class Horror3DGame(arcade.View):
                 # Сбрасываем таймер
                 self.sudden_sound_timer = 0
                 self.sudden_sound_interval = random.uniform(15.0, 30.0)
-
-    # ==================== НОВЫЕ ЖУТКИЕ ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ====================
 
     def update_hallucinations(self, delta_time):
         """Обновление галлюцинаций"""
@@ -939,13 +919,11 @@ class Horror3DGame(arcade.View):
             # Новый уровень темноты
             if self.darkness_stage == 1:
                 self.darkness_target = 0.3
-                print("Темнота начинает сгущаться...")
                 # Резкий звук при изменении темноты
                 if self.sound_manager:
                     self.play_sudden_sound(volume=0.4)
             elif self.darkness_stage == 2:
                 self.darkness_target = 0.6
-                print("Становится еще темнее...")
                 # Громкий звук при сильной темноте
                 if self.sound_manager:
                     self.play_sudden_sound(volume=0.6)
@@ -967,7 +945,6 @@ class Horror3DGame(arcade.View):
                 self.light_flicker_timer = 0
                 self.light_flicker_duration = random.uniform(2.0, 6.0)
                 self.light_flicker_intensity = random.uniform(0.3, 0.8)
-                print("Свет начал мерцать!")
                 # Громкий звук при мерцании
                 if self.sound_manager:
                     self.play_sudden_sound(volume=0.5)
@@ -986,7 +963,6 @@ class Horror3DGame(arcade.View):
                 self.earthquake_timer = 0
                 self.earthquake_duration = random.uniform(3.0, 8.0)
                 self.earthquake_intensity = random.uniform(0.5, 1.0)
-                print("Землетрясение!")
                 # ОЧЕНЬ ГРОМКИЕ звуки при землетрясении
                 if self.sound_manager:
                     self.play_jumpscare_3d()  # Полноценный скример
@@ -1072,7 +1048,6 @@ class Horror3DGame(arcade.View):
         else:
             self.near_monster_effect = max(0, self.near_monster_effect - delta_time * 2)
 
-    # ==================== ОСНОВНАЯ ЛОГИКА ====================
 
     def on_update(self, delta_time: float):
         """Главный цикл"""
@@ -1272,7 +1247,7 @@ class Horror3DGame(arcade.View):
 
     def _apply_movement(self, move_x: float, move_y: float):
         """Применить движение"""
-        speed_factor = 0.9  # УВЕЛИЧЕНА ПРОХОДИМОСТЬ (было 0.8)
+        speed_factor = 0.9
         new_x = self.player_x + move_x * speed_factor
         new_y = self.player_y + move_y * speed_factor
 
@@ -1307,7 +1282,7 @@ class Horror3DGame(arcade.View):
                 drain_multiplier = 1.5
 
             drain_rate = 0.5 * (
-                        1.0 + self.fear_amplifiers['darkness'] * 0.3) * drain_multiplier  # МЕНЬШЕ РАСХОД (было 0.6)
+                    1.0 + self.fear_amplifiers['darkness'] * 0.3) * drain_multiplier  # МЕНЬШЕ РАСХОД (было 0.6)
             self.flashlight_battery = max(0, self.flashlight_battery - delta_time * drain_rate)
 
             if self.flashlight_battery < 30:
@@ -1337,7 +1312,7 @@ class Horror3DGame(arcade.View):
             self.light_level = max(0.1, 0.3 - self.fear_induced_darkness)
 
     def _update_monsters(self, delta_time: float):
-        """Обновить монстров с улучшенным ИИ"""
+        """Обновить монстров"""
         for monster in self.monsters:
             if not monster.active:
                 continue
@@ -1570,7 +1545,6 @@ class Horror3DGame(arcade.View):
             self.visual_distortion = 0.3
             self.player_sanity = max(0, self.player_sanity - 5)
 
-    # ==================== ВЗАИМОДЕЙСТВИЯ ====================
 
     def _check_objectives(self):
         """Проверить цели"""
@@ -1582,7 +1556,7 @@ class Horror3DGame(arcade.View):
             dy = obj.y - self.player_y
             distance = math.sqrt(dx * dx + dy * dy)
 
-            if distance < 1.2:  # УВЕЛИЧЕН РАДИУС СБОРА (было 1.0)
+            if distance < 1.2:
                 obj.collected = True
 
                 if obj.type == 'key':
@@ -1626,8 +1600,6 @@ class Horror3DGame(arcade.View):
                         self.sound_manager.play_sound('upgrade4', volume=volume)
 
                     self.player_stress = min(100, self.player_stress + 20)
-
-    # ==================== ОТРИСОВКА ====================
 
     def on_draw(self):
         """Отрисовка"""
@@ -2619,7 +2591,6 @@ class Horror3DGame(arcade.View):
             bold=True
         )
 
-    # ==================== УПРАВЛЕНИЕ ====================
 
     def on_key_press(self, symbol: int, modifiers: int):
         """Нажатие клавиши"""
@@ -2718,7 +2689,7 @@ class Horror3DGame(arcade.View):
                 self.behavior_data.mouse_deltas.append((dx, dy))
                 self.player_angle += dx * self.mouse_sensitivity
 
-    # ==================== КОНЕЦ ИГРЫ ====================
+    # КОНЕЦ ИГРЫ
 
     def _win_game(self):
         """Победа"""
@@ -2783,8 +2754,6 @@ class Horror3DGame(arcade.View):
             except ImportError:
                 from scenes.main_menu import MainMenuView
                 self.window.show_view(MainMenuView())
-
-    # ==================== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ====================
 
     def _find_start_position(self) -> Tuple[float, float]:
         """Найти открытую позицию для старта"""

@@ -1,4 +1,3 @@
-# main.py - улучшенная версия (без лишнего вывода)
 import arcade
 import os
 import sys
